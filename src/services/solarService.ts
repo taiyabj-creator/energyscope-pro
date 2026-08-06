@@ -57,7 +57,7 @@ interface ChartResponse {
 type EnergySource = "daily" | "monthly" | "yearly" | "total";
 
 async function fetchUtlInverter(): Promise<UtlInverter> {
-  const json = await apiRequest<{ data: UtlInverter }>("/inverter");
+  const json = await apiRequest<{ data: UtlInverter }>("/api/inverter");
 
   return json.data;
 }
@@ -151,8 +151,8 @@ export async function fetchEnergyTotals(): Promise<EnergyTotals> {
   const currentYear = new Date().getFullYear();
   const [inverter, month, year] = await Promise.all([
   fetchUtlInverter(),
-  fetchChart("/charts/monthly"),
-  fetchChart(`/charts/yearly?year=${currentYear}`),
+  fetchChart("/api/charts/monthly"),
+  fetchChart(`/api/charts/yearly?year=${currentYear}`),
 ]);
 
   return {
@@ -180,7 +180,7 @@ export async function fetchPlantInfo(): Promise<PlantInfo> {
   location: string;
   latitude: number;
   longitude: number;
-}>("/plant-config");
+}>("/api/plant-config");
 
   return {
     name: config.name,
@@ -270,7 +270,7 @@ export async function fetchEnergySeries(
 
     if (range === "month") {
     const data = await fetchChart(
-      `/charts/monthly?month=${month}`
+      `/api/charts/monthly?month=${month}`
     );
 
     const daysInMonth = new Date(
@@ -293,7 +293,7 @@ export async function fetchEnergySeries(
     }));
   }
   if (range === "year") {
-    const data = await fetchChart(`/charts/yearly?year=${year}`)
+    const data = await fetchChart(`/api/charts/yearly?year=${year}`)
 
     return (data.results ?? []).map((p) => ({
       label: monthLabel(p.month),
@@ -302,7 +302,7 @@ export async function fetchEnergySeries(
     }));
   }
 
-  const data = await fetchChart("/charts/total")
+  const data = await fetchChart("/api/charts/total")
 
   return (data.results ?? []).map((p) => ({
     label: String(p.year),
@@ -313,7 +313,7 @@ export async function fetchEnergySeries(
 
 export async function fetchDailyHistory(selectedDate: Date): Promise<DailyHistoryRow[]> {
   const data = await fetchChart(
-   `/charts/monthly?month=${monthKey(selectedDate)}`
+   `/api/charts/monthly?month=${monthKey(selectedDate)}`
   );
   return (data.results ?? [])
     .map((point) => ({
@@ -324,7 +324,7 @@ export async function fetchDailyHistory(selectedDate: Date): Promise<DailyHistor
 }
 
 export async function fetchMonthlyHistory(year: number): Promise<MonthlyHistoryRow[]> {
-  const data = await fetchChart(`/charts/yearly?year=${year}`)
+  const data = await fetchChart(`/api/charts/yearly?year=${year}`)
   return (data.results ?? []).map((point) => ({
     month: monthLabel(point.month),
     generation: chartValue(point, "yearly"),
@@ -332,7 +332,7 @@ export async function fetchMonthlyHistory(year: number): Promise<MonthlyHistoryR
 }
 
 export async function fetchYearlyHistory(): Promise<YearlyHistoryRow[]> {
-  const data = await fetchChart("/charts/total")
+  const data = await fetchChart("api/charts/total")
   return (data.results ?? []).map((point) => ({
     year: String(point.year),
     generation: chartValue(point, "total"),
@@ -342,10 +342,10 @@ export async function fetchYearlyHistory(): Promise<YearlyHistoryRow[]> {
 export async function fetchAnalyticsData(year = new Date().getFullYear()): Promise<AnalyticsData> {
   const [plant, yearly, ...monthlyResponses] = await Promise.all([
   fetchPlantInfo(),
-  fetchChart(`/charts/yearly?year=${year}`),
+  fetchChart(`/api/charts/yearly?year=${year}`),
   ...Array.from({ length: 12 }, (_, month) =>
       fetchChart(
-        `/charts/monthly?month=${year}-${String(month + 1).padStart(2, "0")}`,
+        `/api/charts/monthly?month=${year}-${String(month + 1).padStart(2, "0")}`,
       ),
     ),
   ]);
@@ -559,7 +559,7 @@ function weatherDescription(code: number | undefined) {
 export async function fetchMaintenance(): Promise<MaintenanceState> {
   const plant = await fetchPlantInfo();
 
-  const maintenance = await apiRequest<any>("/maintenance");
+  const maintenance = await apiRequest<any>("/api/maintenance");
 
   
   return {
@@ -658,5 +658,5 @@ type PredictionResponse = {
 };
 
 export async function fetchPrediction(): Promise<PredictionResponse> {
-  return apiRequest<PredictionResponse>("/prediction/today");
+  return apiRequest<PredictionResponse>("/api/prediction/today");
 }
