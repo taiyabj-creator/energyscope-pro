@@ -46,7 +46,7 @@ async function getExportData(utlToken, month, year) {
     postChart(utlToken, "daily", today),
     postChart(utlToken, "monthly", month),
     postChart(utlToken, "yearly", year),
-p   ostChart(utlToken, "total"),
+    postChart(utlToken, "total"),
   ]);
 
   return {
