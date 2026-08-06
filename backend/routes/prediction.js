@@ -20,6 +20,10 @@ router.get("/today", async (req, res) => {
     const year = String(now.getFullYear());
 
     const data = await getExportData(month, year);
+    console.log(
+      "Monthly response:",
+      JSON.stringify(data.monthly, null, 2)
+      );
 
     
 
