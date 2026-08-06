@@ -2,22 +2,24 @@ const express = require("express");
 
 const router = express.Router();
 
-const { getToken, getPlantId } = require("../services/utlApi");
+const { getPlantStatus } = require("../services/utlApi");
 
-async function callChart(endpoint, dateParameter = null) {
+async function callChart(req, endpoint, dateParameter = null) {
   
-  const token = getToken();
-  const plantId = getPlantId();
+  const token = req.session.utlToken;
 
-  
+if (!token) {
+  throw new Error("Authentication token missing.");
+}
 
-  if (!token) {
-    throw new Error("Authentication token missing.");
-  }
+const plantStatus = await getPlantStatus(token);
 
-  if (!plantId) {
-    throw new Error("Plant ID missing.");
-  }
+const plantId =
+  plantStatus?.data?.total?.plantIds?.[0];
+
+if (!plantId) {
+  throw new Error("Plant ID missing.");
+}
 
   const body = {
     plant_id: plantId,
@@ -58,7 +60,7 @@ router.get("/daily", async (req, res) => {
     const date =
   req.query.date || new Date().toISOString().slice(0, 10);
 
-res.json(await callChart("daily", date));
+res.json(await callChart(req, "daily", date));
   } catch (err) {
     console.error(err);
 
@@ -81,7 +83,7 @@ const month =
     String(now.getMonth() + 1).padStart(2, "0")
   );
 
-res.json(await callChart("monthly", month));
+res.json(await callChart(req, "monthly", month));
   } catch (err) {
     console.error(err);
 
@@ -97,7 +99,7 @@ router.get("/yearly", async (req, res) => {
     const year =
   req.query.year || String(new Date().getFullYear());
 
-res.json(await callChart("yearly", year));
+res.json(await callChart(req, "yearly", year));
   } catch (err) {
     console.error(err);
 
@@ -110,7 +112,7 @@ res.json(await callChart("yearly", year));
 
 router.get("/total", async (req, res) => {
   try {
-    res.json(await callChart("total"));
+    res.json(await callChart(req, "total"));
   } catch (err) {
     console.error(err);
 

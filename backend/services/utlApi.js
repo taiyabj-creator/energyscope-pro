@@ -82,7 +82,7 @@ function getToken() {
 function getPlantId() {
   return plantId;
 }
-async function getPlantStatus() {
+async function getPlantStatus(token) {
   const response = await fetch(
     "https://utlsolarrms.com/api/plantStatus",
     {
