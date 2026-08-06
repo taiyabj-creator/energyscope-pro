@@ -2,7 +2,12 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const { login } = require("./services/utlApi");
+const {
+  cleanupExpiredSessions,
+} = require("./services/sessionService");
 
 const chartsRouter = require("./routes/charts");
 const configRouter = require("./routes/config");
@@ -12,10 +17,35 @@ const exportRouter = require("./routes/export");
 const predictionRouter = require("./routes/prediction");
 const maintenanceRouter = require("./routes/maintenance");
 const authRouter = require("./routes/auth");
+const healthRouter = require("./routes/health");
 const { authMiddleware } = require("./middleware/auth");
+const requiredEnv = [
+  "JWT_SECRET",
+];
+
+for (const variable of requiredEnv) {
+  if (!process.env[variable]) {
+    console.error(
+      `Missing required environment variable: ${variable}`
+    );
+    process.exit(1);
+  }
+}
 const app = express();
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many login attempts. Please try again in 15 minutes.",
+  },
+});
+
 app.use(cors());
+app.use(helmet());
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -38,13 +68,21 @@ app.use("/api/export", authMiddleware, exportRouter);
 app.use("/api/prediction", authMiddleware, predictionRouter);
 app.use("/api/maintenance", authMiddleware, maintenanceRouter);
 
+app.use("/api/health", healthRouter);
 app.use("/api", configRouter);
+app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth", authRouter);
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+
+  cleanupExpiredSessions();
+
+  setInterval(() => {
+    cleanupExpiredSessions();
+  }, 30 * 60 * 1000);
 
   try {
     await login();

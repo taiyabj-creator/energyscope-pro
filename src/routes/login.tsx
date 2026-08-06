@@ -2,8 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, KeyboardEvent } from "react";
 import { useDashboardAuth } from "@/context/DashboardAuthContext";
 import {
-  setRememberMe,
-  setAuthToken,
+  setRememberMe as setClientRememberMe,
 } from "@/api/client";
 import { login as loginApi } from "@/api/auth";
 
@@ -27,22 +26,22 @@ async function handleLogin() {
     setLoading(true);
     setError("");
 
-    setRememberMe(rememberMe);
+    setClientRememberMe(rememberMe);
 
-const data = await loginApi(email, password);
-
-login();
-
-navigate({ to: "/" });
-
-    setAuthToken(data.token);
+    await loginApi(
+      email,
+      password,
+      rememberMe
+    );
 
     login();
 
     navigate({ to: "/" });
-    } catch (err) {
+  } catch (err) {
     setError(
-      err instanceof Error ? err.message : "Login failed"
+      err instanceof Error
+        ? err.message
+        : "Login failed"
     );
   } finally {
     setLoading(false);

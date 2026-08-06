@@ -2,9 +2,17 @@ const authService = require("../services/authService");
 
 async function login(req, res) {
   try {
-    const { email, password } = req.body;
+    const {
+      email,
+       password,
+      rememberMe,
+    } = req.body;
 
-    const result = await authService.login(email, password);
+    const result = await authService.login(
+      email,
+      password,
+     rememberMe
+    );
 
     return res.json(result);
   } catch (err) {
@@ -17,7 +25,7 @@ async function login(req, res) {
 
 async function logout(req, res) {
   try {
-    console.log("Logout token:", req.token);
+   
     await authService.logout(req.token);
 
     return res.json({

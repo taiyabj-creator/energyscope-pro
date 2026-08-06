@@ -112,9 +112,25 @@ function deleteSession(sessionId) {
   deleteStmt.run(sessionId);
 }
 
+function cleanupExpiredSessions() {
+  const result = db
+    .prepare(`
+      DELETE FROM sessions
+      WHERE expires_at <= ?
+    `)
+    .run(Date.now());
+
+  console.log(
+    `Session cleanup completed. Removed ${result.changes} expired session(s).`
+  );
+
+  return result.changes;
+}
+
 module.exports = {
   createSession,
   getSession,
   updateSession,
   deleteSession,
+  cleanupExpiredSessions,
 };

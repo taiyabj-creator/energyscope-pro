@@ -14,7 +14,8 @@ const DEVICE_ID = "hbeon_mobile";
 
 export async function login(
   email: string,
-  password: string
+  password: string,
+  rememberMe: boolean
 ) {
   setDeviceId(DEVICE_ID);
 
@@ -23,10 +24,11 @@ export async function login(
     {
       method: "POST",
       body: JSON.stringify({
-        email,
-        password,
-        device_id: DEVICE_ID,
-      }),
+       email,
+       password,
+       device_id: DEVICE_ID,
+       rememberMe,
+}),
     }
   );
 

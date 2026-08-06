@@ -4,7 +4,11 @@ const crypto = require("crypto");
 const pythonAdapter = require("../adapters/pythonAdapter");
 const sessionService = require("./sessionService");
 
-async function login(email, password) {
+async function login(
+  email,
+  password,
+  rememberMe = true
+) {
   const response = await pythonAdapter.login(email, password);
 
  
@@ -19,7 +23,7 @@ async function login(email, password) {
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: "7d",
+      expiresIn: rememberMe ? "7d" : "12h",
     }
   );
 
@@ -38,7 +42,7 @@ async function login(email, password) {
     device_id: crypto.randomUUID(),
     utlToken: response.token,
     expiresAt,
-    remember_me: true,
+    remember_me: rememberMe,
   });
 
   return {
