@@ -7,6 +7,10 @@ const { getPlantStatus } = require("../services/utlApi");
 async function callChart(req, endpoint, dateParameter = null) {
   
   const token = req.session.utlToken;
+  console.log(
+  "Charts token:",
+  token.substring(0, 40)
+);
 
 if (!token) {
   throw new Error("Authentication token missing.");

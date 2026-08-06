@@ -27,7 +27,7 @@ router.get("/", async (req, res) => {
     );
 
     const data = await response.json();
-    const plantStatus = await getPlantStatus();
+    const plantStatus = await getPlantStatus(req.session.utlToken);
 const plantId = getPlantId();
 
 let loggerStatus = "0";
