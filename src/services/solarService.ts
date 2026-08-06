@@ -251,7 +251,7 @@ export async function fetchEnergySeries(
   const year = String(selectedDate.getFullYear());
 
   if (range === "day") {
-    const data = await fetchChart(`/charts/daily?date=${day}`)
+    const data = await fetchChart(`/api/charts/daily?date=${day}`)
 
     
 
@@ -332,7 +332,7 @@ export async function fetchMonthlyHistory(year: number): Promise<MonthlyHistoryR
 }
 
 export async function fetchYearlyHistory(): Promise<YearlyHistoryRow[]> {
-  const data = await fetchChart("api/charts/total")
+  const data = await fetchChart("/api/charts/total")
   return (data.results ?? []).map((point) => ({
     year: String(point.year),
     generation: chartValue(point, "total"),
