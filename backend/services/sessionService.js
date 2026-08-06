@@ -56,6 +56,10 @@ function createSession(sessionId, data) {
     now,
     data.remember_me ? 1 : 0
   );
+
+  const verify = getStmt.get(sessionId);
+
+console.log("Inserted session:", verify);
 }
 
 function getSession(sessionId) {
