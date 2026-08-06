@@ -1,67 +1,62 @@
-import { motion } from "framer-motion";
-import { Cpu, Home, Sun, Zap, BatteryCharging } from "lucide-react";
-import { useBattery, useLivePower } from "@/hooks/useSolarData";
-import { formatPower } from "@/utils/format";
+import { Battery, Cpu, Grid2X2, Home, Sun } from "lucide-react";
+import { useLivePower, useLogger, usePlantInfo } from "@/hooks/useSolarData";
 import { cn } from "@/lib/utils";
+import { getCapacityPercentage } from "@/utils/capacity";
+import { formatPower } from "@/utils/format";
+import type { LucideIcon } from "lucide-react";
 
-/** Line definitions in the SVG coordinate space (0 0 520 360). */
 const PATHS = {
-  solar: "M260 108 L260 152",
-  grid: "M126 258 L126 208 Q126 190 148 190 L226 190",
-  load: "M394 258 L394 208 Q394 190 372 190 L294 190",
-  battery: "M260 232 L260 268",
+  solar: "M380 126 C380 150 380 170 380 184",
+  grid: "M326 286 C286 309 239 334 194 369",
+  house: "M434 286 C474 309 521 334 566 369",
+  battery: "M380 293 L380 383",
 };
 
-function reverse(d: string) {
-  // Dots travel along the same geometry in the opposite direction.
-  return d;
-}
+type NodeState = "active" | "inactive" | "disabled";
 
-function FlowLine({
+function FlowPath({
   d,
-  color,
   active,
-  reversed,
-  intensity,
+  color,
+  dashed = false,
 }: {
   d: string;
-  color: string;
   active: boolean;
-  reversed?: boolean;
-  intensity: number;
+  color: string;
+  dashed?: boolean;
 }) {
   const dots = active ? 3 : 0;
-  const duration = Math.max(1.1, 2.6 - intensity * 1.5);
+
   return (
     <g>
       <path
         d={d}
         fill="none"
-        stroke="currentColor"
+        stroke="var(--border)"
         strokeWidth={2}
         strokeLinecap="round"
-        className="text-border"
+        strokeDasharray={dashed ? "5 7" : undefined}
       />
-      {active && (
+      {active ? (
         <path
           d={d}
           fill="none"
           stroke={color}
           strokeWidth={2.5}
           strokeLinecap="round"
-          opacity={0.35}
+          opacity={0.3}
         />
-      )}
-      {Array.from({ length: dots }).map((_, i) => (
-        <circle key={i} r={4} fill={color}>
+      ) : null}
+      {Array.from({ length: dots }).map((_, index) => (
+        <circle key={index} r={4} fill={color}>
           <animateMotion
-            dur={`${duration}s`}
+            dur="2.1s"
             repeatCount="indefinite"
-            begin={`${(i * duration) / dots}s`}
-            keyPoints={reversed ? "1;0" : "0;1"}
+            begin={`${(index * 2.1) / dots}s`}
+            keyPoints="0;1"
             keyTimes="0;1"
             calcMode="linear"
-            path={reverse(d)}
+            path={d}
           />
         </circle>
       ))}
@@ -69,42 +64,50 @@ function FlowLine({
   );
 }
 
-function Node({
+function FlowNode({
   x,
   y,
+  icon: Icon,
   label,
   value,
-  unit,
-  icon: Icon,
-  colorClass,
-  ringClass,
+  detail,
+  state,
+  dimmed = false,
 }: {
   x: number;
   y: number;
+  icon: LucideIcon;
   label: string;
   value: string;
-  unit: string;
-  icon: typeof Sun;
-  colorClass: string;
-  ringClass: string;
+  detail: string;
+  state: NodeState;
+  dimmed?: boolean;
 }) {
+  const appearance = {
+    active: "border-primary/35 bg-primary/10 text-primary",
+    inactive: "border-border bg-muted/40 text-muted-foreground",
+    disabled: "border-dashed border-border bg-muted/25 text-muted-foreground",
+  }[state];
+
   return (
-    <foreignObject x={x - 78} y={y - 52} width={156} height={104}>
-      <div className="flex h-full w-full flex-col items-center justify-center gap-1.5">
-        <div
+    <foreignObject x={x - 90} y={y - 60} width={180} height={120}>
+      <div
+        className={cn(
+          "flex h-full flex-col items-center justify-center gap-1.5 text-center",
+          dimmed && "opacity-45",
+        )}
+      >
+        <span
           className={cn(
-            "grid size-11 place-items-center rounded-2xl border bg-card/80 backdrop-blur",
-            ringClass,
-            colorClass,
+            "grid size-12 place-items-center rounded-2xl border bg-card/90 shadow-sm",
+            appearance,
           )}
         >
           <Icon className="size-5" aria-hidden />
-        </div>
-        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-        <p className="num text-sm font-semibold">
-          {value}
-          <span className="ml-1 text-[10px] font-normal text-muted-foreground">{unit}</span>
-        </p>
+        </span>
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="num text-sm font-semibold">{value}</p>
+        <p className="text-[10px] text-muted-foreground">{detail}</p>
       </div>
     </foreignObject>
   );
@@ -112,119 +115,84 @@ function Node({
 
 export function PowerFlow() {
   const { data: live } = useLivePower();
-  const { data: battery } = useBattery();
+  const { data: logger } = useLogger();
+  const { data: plant } = usePlantInfo();
 
-  const solar = live?.solarPower ?? 0;
-  const load = live?.loadPower ?? 0;
-  const grid = live?.gridPower ?? 0;
-  const exporting = grid < 0;
-  const hasBattery = Boolean(battery?.installed);
-
-  const s = formatPower(solar);
-  const l = formatPower(load);
-  const g = formatPower(Math.abs(grid));
+  const solarPower = live?.solarPower ?? 0;
+  const solar = formatPower(solarPower);
+  const capacityPercentage = getCapacityPercentage(solarPower, plant?.capacityKw);
+  const loggerOnline = logger?.status === "online";
+  const producing = live?.plantStatus === "producing" && solarPower > 0;
+  const animateFlow = loggerOnline && producing;
+  const inverterDetail = animateFlow ? "Producing" : "Standby";
 
   return (
-    <div className="relative">
+    <div className="relative overflow-hidden">
       <svg
-        viewBox="0 0 520 360"
-        className="w-full"
+        viewBox="0 0 760 540"
+        className="mx-auto block w-full max-w-4xl"
         role="img"
-        aria-label={`Live power flow: solar ${s.value} ${s.unit}, load ${l.value} ${l.unit}, grid ${exporting ? "export" : "import"} ${g.value} ${g.unit}`}
+        aria-label={`Power flow: solar ${solar.value} ${solar.unit}; ${inverterDetail.toLowerCase()}; grid and home consumption are not measured`}
       >
-        <FlowLine
-          d={PATHS.solar}
-          color="var(--solar)"
-          active={solar > 20}
-          intensity={Math.min(1, solar / 4305)}
-        />
-        <FlowLine
-          d={PATHS.grid}
-          color="var(--grid)"
-          active={Math.abs(grid) > 20}
-          reversed={!exporting}
-          intensity={Math.min(1, Math.abs(grid) / 3000)}
-        />
-        <FlowLine
-          d={PATHS.load}
-          color="var(--load)"
-          active={load > 20}
-          reversed
-          intensity={Math.min(1, load / 3000)}
-        />
-        {hasBattery && (
-          <FlowLine
-            d={PATHS.battery}
-            color="var(--battery)"
-            active={Boolean(battery?.power)}
-            reversed={!battery?.charging}
-            intensity={0.5}
-          />
-        )}
+        <FlowPath d={PATHS.solar} color="var(--solar)" active={animateFlow} />
+        <FlowPath d={PATHS.grid} color="var(--grid)" active={animateFlow} />
+        <FlowPath d={PATHS.house} color="var(--load)" active={animateFlow} />
+        <FlowPath d={PATHS.battery} color="var(--muted-foreground)" active={false} dashed />
 
-        <Node
-          x={260}
-          y={56}
-          label="Solar"
-          value={s.value}
-          unit={s.unit}
+        <FlowNode
+          x={380}
+          y={66}
           icon={Sun}
-          colorClass="text-solar"
-          ringClass="border-solar/30"
+          label="Solar"
+          value={`${solar.value} ${solar.unit}`}
+          detail={
+            capacityPercentage === null
+              ? "Capacity unavailable"
+              : `${capacityPercentage}% of capacity`
+          }
+          state="active"
+          dimmed={!animateFlow}
         />
-        <Node
-          x={260}
-          y={190}
-          label="Inverter"
-          value={((solar / 4305) * 100).toFixed(0)}
-          unit="% load"
+        <FlowNode
+          x={380}
+          y={240}
           icon={Cpu}
-          colorClass="text-primary"
-          ringClass="border-primary/30"
+          label="Inverter"
+          value={capacityPercentage === null ? "—" : `${capacityPercentage}%`}
+          detail={inverterDetail}
+          state={producing ? "active" : "inactive"}
+          dimmed={!animateFlow}
         />
-        <Node
-          x={126}
-          y={300}
-          label={exporting ? "Grid export" : "Grid import"}
-          value={g.value}
-          unit={g.unit}
-          icon={Zap}
-          colorClass="text-grid"
-          ringClass="border-grid/30"
+        <FlowNode
+          x={132}
+          y={426}
+          icon={Grid2X2}
+          label="Grid"
+          value="Connection"
+          detail="Not measured"
+          state="inactive"
+          dimmed={!animateFlow}
         />
-        <Node
-          x={394}
-          y={300}
-          label="Home load"
-          value={l.value}
-          unit={l.unit}
+        <FlowNode
+          x={628}
+          y={426}
           icon={Home}
-          colorClass="text-load"
-          ringClass="border-load/30"
+          label="House"
+          value="Not measured"
+          detail="Consumption unavailable"
+          state="inactive"
+          dimmed={!animateFlow}
         />
-        {hasBattery && (
-          <Node
-            x={260}
-            y={310}
-            label="Battery"
-            value={String(battery?.soc ?? 0)}
-            unit="%"
-            icon={BatteryCharging}
-            colorClass="text-battery"
-            ringClass="border-battery/30"
-          />
-        )}
+        <FlowNode
+          x={380}
+          y={444}
+          icon={Battery}
+          label="Battery"
+          value="Coming soon"
+          detail="Not supported"
+          state="disabled"
+        />
       </svg>
-
-      {!hasBattery && (
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="mt-2 rounded-xl border border-dashed border-border/80 px-3 py-2 text-center text-xs text-muted-foreground"
-        >
-          No battery installed — storage flow appears here automatically once a battery is added.
-        </motion.p>
-      )}
     </div>
   );
 }

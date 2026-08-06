@@ -1,0 +1,1 @@
+"""EnergyScope FastAPI application package."""

@@ -56,7 +56,16 @@ export function StatusDot({ status }: { status: "online" | "offline" | "warning"
       : status === "warning"
         ? "bg-warning shadow-[0_0_0_4px_color-mix(in_oklab,var(--warning)_22%,transparent)]"
         : "bg-destructive shadow-[0_0_0_4px_color-mix(in_oklab,var(--destructive)_22%,transparent)]";
-  return <span className={cn("inline-block size-2 shrink-0 rounded-full", tone)} />;
+
+  return (
+    <span
+      className={cn(
+        "inline-block size-2 shrink-0 rounded-full",
+        tone,
+        status === "offline" && "animate-pulse"
+      )}
+    />
+  );
 }
 
 export function Chip({

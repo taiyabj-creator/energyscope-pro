@@ -11,11 +11,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { data: plant } = usePlantInfo();
-  const capacity = plant?.capacityKw ?? 4.305;
+  const capacity = plant?.capacityKw;
 
   const title =
     navItems.find((i) => i.to === pathname)?.label ??
     (pathname === "/profile" ? "Profile" : "UTL Solar Dashboard");
+    if (pathname === "/login") {
+     return <>{children}</>;
+}
 
   return (
     <div className="relative min-h-screen">
@@ -61,7 +64,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       </AnimatePresence>
 
-      <div className={cn("transition-[padding] duration-300", collapsed ? "lg:pl-[84px]" : "lg:pl-[264px]")}>
+      <div
+        className={cn(
+          "transition-[padding] duration-300",
+          collapsed ? "lg:pl-[84px]" : "lg:pl-[264px]",
+        )}
+      >
         <Header title={title} onOpenSidebar={() => setDrawerOpen(true)} />
         <main className="mx-auto max-w-[1600px] px-4 pb-16 pt-6 sm:px-6 lg:pt-8">
           <AnimatePresence mode="wait">

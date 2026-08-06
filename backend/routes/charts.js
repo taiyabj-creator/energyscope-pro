@@ -5,14 +5,11 @@ const router = express.Router();
 const { getToken, getPlantId } = require("../services/utlApi");
 
 async function callChart(endpoint, dateParameter = null) {
-  console.log("================================");
-  console.log("Endpoint:", endpoint);
-
+  
   const token = getToken();
   const plantId = getPlantId();
 
-  console.log("Token exists:", !!token);
-  console.log("Plant ID:", plantId);
+  
 
   if (!token) {
     throw new Error("Authentication token missing.");
@@ -30,10 +27,7 @@ async function callChart(endpoint, dateParameter = null) {
     body.date_parameter = dateParameter;
   }
 
-  console.log("Request body:");
-  console.log(body);
-
-  console.log("Calling UTL API...");
+  
 
   const response = await fetch(
     `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
@@ -49,22 +43,21 @@ async function callChart(endpoint, dateParameter = null) {
     }
   );
 
-  console.log("UTL replied");
-  console.log("Status:", response.status);
+  
 
   const data = await response.json();
 
-  console.log("JSON parsed");
-  console.log("Results:", data.results?.length);
+  
 
   return data;
 }
 
 router.get("/daily", async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const date =
+  req.query.date || new Date().toISOString().slice(0, 10);
 
-    res.json(await callChart("daily", today));
+res.json(await callChart("daily", date));
   } catch (err) {
     console.error(err);
 
@@ -79,12 +72,15 @@ router.get("/monthly", async (req, res) => {
   try {
     const now = new Date();
 
-    const month =
-      now.getFullYear() +
-      "-" +
-      String(now.getMonth() + 1).padStart(2, "0");
+const month =
+  req.query.month ||
+  (
+    now.getFullYear() +
+    "-" +
+    String(now.getMonth() + 1).padStart(2, "0")
+  );
 
-    res.json(await callChart("monthly", month));
+res.json(await callChart("monthly", month));
   } catch (err) {
     console.error(err);
 
@@ -97,7 +93,10 @@ router.get("/monthly", async (req, res) => {
 
 router.get("/yearly", async (req, res) => {
   try {
-    res.json(await callChart("yearly", String(new Date().getFullYear())));
+    const year =
+  req.query.year || String(new Date().getFullYear());
+
+res.json(await callChart("yearly", year));
   } catch (err) {
     console.error(err);
 

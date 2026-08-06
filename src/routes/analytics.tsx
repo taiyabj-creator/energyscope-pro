@@ -11,83 +11,68 @@ import {
 } from "recharts";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
-import { useAnalyticsSummary, useEnergySeries, useHeatmap } from "@/hooks/useSolarData";
+import { useAnalyticsData } from "@/hooks/useSolarData";
 import { formatDate } from "@/utils/format";
 
 export const Route = createFileRoute("/analytics")({
-  head: () => ({
-    meta: [
-      { title: "Analytics — UTL Solar Dashboard" },
-      {
-        name: "description",
-        content:
-          "Production trends, performance ratio, best and worst production days and a yearly generation heatmap.",
-      },
-      { property: "og:title", content: "Analytics — UTL Solar Dashboard" },
-      {
-        property: "og:description",
-        content: "Trends, performance comparison and a monthly generation heatmap.",
-      },
-    ],
-  }),
+  head: () => ({ meta: [{ title: "Analytics — UTL Solar Dashboard" }] }),
   component: AnalyticsPage,
 });
 
 function AnalyticsPage() {
-  const { data: summary } = useAnalyticsSummary();
-  const { data: monthly } = useEnergySeries("year");
-  const { data: heatmap } = useHeatmap();
-
-  const max = Math.max(1, ...(heatmap ?? []).map((c) => c.value));
-  const months = [...new Set((heatmap ?? []).map((c) => c.month))];
+  const year = new Date().getFullYear();
+  const { data } = useAnalyticsData(year);
+  const summary = data?.summary;
+  const heatmap = data?.heatmap ?? [];
+  const max = Math.max(1, ...heatmap.map((cell) => cell.value));
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Average daily yield"
-          value={(summary?.averageDaily ?? 0).toFixed(1)}
+          value={summary ? summary.averageDaily.toFixed(2) : "—"}
           unit="kWh"
           icon={LineChartIcon}
           tone="solar"
-          footnote="Rolling 12 months"
+          footnote={`${year} recorded days`}
         />
         <MetricCard
           title="Specific yield"
-          value={(summary?.specificYield ?? 0).toFixed(2)}
+          value={summary ? summary.specificYield.toFixed(2) : "—"}
           unit="kWh/kWp"
           icon={Gauge}
-          footnote="Per installed kilowatt"
+          footnote="Year-to-date production / installed capacity"
         />
         <MetricCard
           title="Best production day"
-          value={(summary?.bestDay.generation ?? 0).toFixed(2)}
+          value={summary ? summary.bestDay.generation.toFixed(2) : "—"}
           unit="kWh"
           icon={Award}
           tone="battery"
-          footnote={summary ? formatDate(summary.bestDay.date) : ""}
+          footnote={summary ? displayDate(summary.bestDay.date) : "Not available"}
         />
         <MetricCard
           title="Worst production day"
-          value={(summary?.worstDay.generation ?? 0).toFixed(2)}
+          value={summary ? summary.worstDay.generation.toFixed(2) : "—"}
           unit="kWh"
           icon={CalendarX}
-          tone="grid"
-          footnote={summary ? formatDate(summary.worstDay.date) : ""}
+          tone="neutral"
+          footnote={summary ? displayDate(summary.worstDay.date) : "Not available"}
         />
       </div>
 
       <Panel delay={0.1}>
         <PanelHeading
-          title="Production trend"
-          subtitle={`Monthly yield against the previous year · performance ratio ${summary?.performanceRatio ?? "—"}%`}
+          title="Monthly production trend"
+          subtitle={`UTL yearly chart data for ${year}`}
         />
         <div className="h-[320px]">
-          {!monthly ? (
+          {!data ? (
             <Skeleton className="h-full w-full" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthly} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+              <LineChart data={data.monthlyTrend} margin={{ top: 8, right: 8, left: -18 }}>
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="label"
@@ -109,24 +94,15 @@ function AnalyticsPage() {
                     borderRadius: 12,
                     fontSize: 12,
                   }}
+                  formatter={(value) => [`${Number(value).toFixed(2)} kWh`, "Production"]}
                 />
                 <Line
                   type="monotone"
                   dataKey="value"
-                  name="This year"
+                  name="Production"
                   stroke="var(--solar)"
                   strokeWidth={2.4}
                   dot={{ r: 3 }}
-                  animationDuration={900}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="compare"
-                  name="Last year"
-                  stroke="var(--muted-foreground)"
-                  strokeWidth={1.6}
-                  strokeDasharray="4 4"
-                  dot={false}
                   animationDuration={900}
                 />
               </LineChart>
@@ -139,59 +115,75 @@ function AnalyticsPage() {
         <Panel delay={0.15}>
           <PanelHeading
             title="Generation heatmap"
-            subtitle="Daily yield across the year — darker cells mean lower production"
+            subtitle="Daily production returned by each monthly UTL chart; missing dates are blank"
           />
-          <div className="scroll-slim overflow-x-auto pb-2">
-            <div className="min-w-[640px] space-y-1.5">
-              {months.map((month) => (
-                <div key={month} className="flex items-center gap-2">
-                  <span className="w-8 shrink-0 text-[10px] uppercase text-muted-foreground">
-                    {month}
-                  </span>
-                  <div className="flex gap-[3px]">
-                    {(heatmap ?? [])
-                      .filter((c) => c.month === month)
-                      .map((c) => (
-                        <span
-                          key={`${month}-${c.day}`}
-                          title={`${month} ${c.day}: ${c.value} kWh`}
-                          className="size-[13px] rounded-[3px] transition-transform hover:scale-125"
-                          style={{
-                            background: `color-mix(in oklab, var(--solar) ${Math.round((c.value / max) * 100)}%, var(--muted))`,
-                          }}
-                        />
-                      ))}
+          {!data ? (
+            <Skeleton className="h-56 w-full" />
+          ) : (
+            <div className="scroll-slim overflow-x-auto pb-2">
+              <div className="min-w-[640px] space-y-1.5">
+                {Array.from({ length: 12 }, (_, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <span className="w-8 shrink-0 text-[10px] uppercase text-muted-foreground">
+                      {new Date(year, index).toLocaleString("en", { month: "short" })}
+                    </span>
+                    <div className="flex gap-[3px]">
+                      {Array.from(
+                        { length: new Date(year, index + 1, 0).getDate() },
+                        (_, dayIndex) => {
+                          const cell = heatmap.find(
+                            (item) =>
+                              item.month ===
+                                new Date(year, index).toLocaleString("en", { month: "short" }) &&
+                              item.day === dayIndex + 1,
+                          );
+                          return (
+                            <span
+                              key={dayIndex}
+                              title={
+                                cell
+                                  ? `${cell.month} ${cell.day}: ${cell.value.toFixed(2)} kWh`
+                                  : "No data"
+                              }
+                              className="size-[13px] rounded-[3px]"
+                              style={{
+                                background: cell
+                                  ? `color-mix(in oklab, var(--solar) ${Math.round((cell.value / max) * 100)}%, var(--muted))`
+                                  : "var(--muted)",
+                              }}
+                            />
+                          );
+                        },
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </Panel>
-
         <Panel delay={0.2}>
-          <PanelHeading title="Performance comparison" subtitle="Insight cards from production history" />
+          <PanelHeading
+            title="Performance comparison"
+            subtitle="Calculated only where UTL history supports it"
+          />
           <div className="space-y-3">
             <Insight
               title="Month over month"
-              value={`${(summary?.monthOverMonthPct ?? 0).toFixed(1)}%`}
-              detail="Lower yield tracks a cloudier month rather than a plant fault."
-              negative={(summary?.monthOverMonthPct ?? 0) < 0}
+              value={summary ? `${summary.monthOverMonthPct.toFixed(1)}%` : "Not available"}
             />
             <Insight
-              title="Today vs monthly average"
-              value="+21.0%"
-              detail="Today is running ahead of the monthly average daily generation."
+              title="Current month daily average"
+              value={
+                data?.currentMonthAverage === null || data?.currentMonthAverage === undefined
+                  ? "Not available"
+                  : `${data.currentMonthAverage.toFixed(2)} kWh`
+              }
             />
             <Insight
-              title="Monthly vs yearly average"
-              value="-4.2%"
-              detail="Seasonal variation; within the expected range for this location."
-              negative
-            />
-            <Insight
-              title="Long-term trend"
-              value="-0.6%/yr"
-              detail="Consistent with normal module degradation for a 3-year-old array."
+              title="Performance ratio"
+              value="Not available"
+              detail="Irradiance data is not provided by the UTL production endpoints."
             />
           </div>
         </Panel>
@@ -203,23 +195,23 @@ function AnalyticsPage() {
 function Insight({
   title,
   value,
-  detail,
-  negative,
+  detail = "Calculated from UTL chart data.",
 }: {
   title: string;
   value: string;
-  detail: string;
-  negative?: boolean;
+  detail?: string;
 }) {
   return (
     <div className="rounded-2xl border border-border/70 bg-muted/25 p-4">
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-sm font-medium">{title}</p>
-        <p className={`num text-sm font-semibold ${negative ? "text-destructive" : "text-positive"}`}>
-          {value}
-        </p>
+        <p className="num text-sm font-semibold text-primary">{value}</p>
       </div>
       <p className="mt-1.5 text-xs text-muted-foreground">{detail}</p>
     </div>
   );
+}
+
+function displayDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? formatDate(value) : "—";
 }

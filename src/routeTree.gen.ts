@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as DevicesRouteImport } from './routes/devices'
+import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as EnergyRouteImport } from './routes/energy'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as MaintenanceRouteImport } from './routes/maintenance'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -34,6 +36,11 @@ const DevicesRoute = DevicesRouteImport.update({
   path: '/devices',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DiagnosticsRoute = DiagnosticsRouteImport.update({
+  id: '/diagnostics',
+  path: '/diagnostics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EnergyRoute = EnergyRouteImport.update({
   id: '/energy',
   path: '/energy',
@@ -42,6 +49,11 @@ const EnergyRoute = EnergyRouteImport.update({
 const HistoryRoute = HistoryRouteImport.update({
   id: '/history',
   path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MaintenanceRoute = MaintenanceRouteImport.update({
@@ -69,8 +81,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/devices': typeof DevicesRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/energy': typeof EnergyRoute
   '/history': typeof HistoryRoute
+  '/login': typeof LoginRoute
   '/maintenance': typeof MaintenanceRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
@@ -80,8 +94,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/devices': typeof DevicesRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/energy': typeof EnergyRoute
   '/history': typeof HistoryRoute
+  '/login': typeof LoginRoute
   '/maintenance': typeof MaintenanceRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
@@ -92,8 +108,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/devices': typeof DevicesRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/energy': typeof EnergyRoute
   '/history': typeof HistoryRoute
+  '/login': typeof LoginRoute
   '/maintenance': typeof MaintenanceRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
@@ -105,8 +123,10 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/devices'
+    | '/diagnostics'
     | '/energy'
     | '/history'
+    | '/login'
     | '/maintenance'
     | '/profile'
     | '/settings'
@@ -116,8 +136,10 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/devices'
+    | '/diagnostics'
     | '/energy'
     | '/history'
+    | '/login'
     | '/maintenance'
     | '/profile'
     | '/settings'
@@ -127,8 +149,10 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/devices'
+    | '/diagnostics'
     | '/energy'
     | '/history'
+    | '/login'
     | '/maintenance'
     | '/profile'
     | '/settings'
@@ -139,8 +163,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
   DevicesRoute: typeof DevicesRoute
+  DiagnosticsRoute: typeof DiagnosticsRoute
   EnergyRoute: typeof EnergyRoute
   HistoryRoute: typeof HistoryRoute
+  LoginRoute: typeof LoginRoute
   MaintenanceRoute: typeof MaintenanceRoute
   ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
@@ -170,6 +196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevicesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/diagnostics': {
+      id: '/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/diagnostics'
+      preLoaderRoute: typeof DiagnosticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/energy': {
       id: '/energy'
       path: '/energy'
@@ -182,6 +215,13 @@ declare module '@tanstack/react-router' {
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/maintenance': {
@@ -219,8 +259,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
   DevicesRoute: DevicesRoute,
+  DiagnosticsRoute: DiagnosticsRoute,
   EnergyRoute: EnergyRoute,
   HistoryRoute: HistoryRoute,
+  LoginRoute: LoginRoute,
   MaintenanceRoute: MaintenanceRoute,
   ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,

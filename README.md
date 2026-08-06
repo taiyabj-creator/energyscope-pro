@@ -1,528 +1,260 @@
-# Solara Vista
+# ☀️ EnergyScope
 
-IMPORTANT
+EnergyScope is a modern, mobile-first solar monitoring dashboard for UTL Solar inverter systems.
 
-This project is NOT a generic solar dashboard.
+The goal of this project is to build a faster, cleaner, and more feature-rich alternative to the official UTL monitoring application while maintaining compatibility with the official UTL backend API.
 
-This is a production-grade web application for monitoring a UTL Solar inverter.
+---
 
-The frontend must be built in React + TypeScript + Vite + Tailwind CSS.
+# Features
 
-Do NOT build any backend.
+Current Features
 
-Do NOT invent API endpoints.
+- Live inverter monitoring
+- Live generation charts
+- Daily, Monthly, Yearly and Total production
+- Responsive dashboard
+- Dark / Light theme
+- Modern UI built with shadcn/ui
+- Mobile-first design
+- React Query data fetching
+- Professional charts using Recharts
 
-Do NOT invent fake business logic.
+Planned Features
 
-Only build the frontend with reusable components and mock data placeholders that can later be replaced by API responses.
+- Progressive Web App (PWA)
+- Logger Health dashboard
+- Weather integration
+- Maintenance history
+- Excel export
+- CSV export
+- Push notifications
+- Multi-user support
+- AI-powered analytics
+- Seasonal comparisons
+- Historical uptime analysis
 
-==================================================
+---
 
-PROJECT
+# Technology Stack
 
-Name
+## Frontend
 
-UTL Solar Dashboard
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui
+- Radix UI
+- TanStack Query
+- Recharts
+- Framer Motion
 
-Purpose
+Hosting
 
-A modern premium solar monitoring dashboard inspired by:
+- Vercel
 
-• Tesla Energy
+---
 
-• Huawei FusionSolar
+## Backend
 
-• SolarEdge
+Current
 
-• Victron VRM
+- Express (temporary)
 
-The application must look like commercial software.
+Final
 
-Avoid anything that looks like an admin template.
+- FastAPI
+- SQLAlchemy
+- Alembic
+- Pydantic
+- httpx
 
-==================================================
+Hosting
 
-DESIGN PHILOSOPHY
+- Render
 
-The UI should feel:
+---
 
-Premium
+## Database
 
-Minimal
+Final Database
 
-Elegant
+- Turso (Cloud SQLite)
 
-Fast
+---
 
-Responsive
+# Architecture
 
-Modern
+```
+Browser / PWA
+        │
+        ▼
+React Frontend
+        │
+        ▼
+FastAPI Backend
+        │
+        ├────────► UTL Solar API
+        ├────────► Weather Provider
+        └────────► Turso Database
+```
 
-High information density without clutter.
+The frontend never communicates directly with external providers.
 
-Lots of spacing.
+The backend acts as the single source of truth.
 
-Rounded cards.
+---
 
-Subtle glassmorphism.
+# Project Structure
 
-Beautiful gradients.
+```
+backend/
+    Express backend (temporary)
 
-Smooth animations.
+src/
+    React frontend
 
-Dark mode first.
+public/
+    Static assets
 
-Light mode supported.
+ARCHITECTURE.md
+    Technical architecture
 
-Use modern typography.
+PROJECT_ROADMAP.md
+    Development roadmap
 
-Use Lucide icons.
+CONTRIBUTING.md
+    Development guidelines
+```
 
-Avoid Bootstrap appearance.
+---
 
-Avoid Material Design appearance.
+# Development Status
 
-==================================================
+Current Stage
 
-TARGET USERS
+Prototype / Active Development
 
-Solar system owners
+Completed
 
-Installers
+- Reverse engineered UTL authentication
+- Reverse engineered Plant Status endpoint
+- Reverse engineered InverterDevice endpoint
+- Reverse engineered generation chart endpoints
+- Live backend prototype
+- Responsive dashboard
+- Live chart integration
 
-Engineers
+In Progress
 
-Users checking production daily
+- Replace remaining mock data
+- Backend migration to FastAPI
+- Turso integration
 
-==================================================
+Upcoming
 
-CURRENT SYSTEM
+- PWA
+- Logger Health
+- Weather
+- Maintenance module
+- Export system
+- Deployment
 
-Current installation
+---
 
-4.305 kW
+# Running the Project
 
-On-grid system
+## Frontend
 
-NO BATTERY INSTALLED
+Install dependencies
 
-The application MUST support batteries in the future.
+```bash
+npm install
+```
 
-If no battery exists
+Run
 
-Do NOT display fake battery percentage.
-
-Instead show
-
-"No Battery Installed"
-
-or automatically hide battery widgets.
-
-==================================================
-
-TECH STACK
-
-React
-
-TypeScript
-
-Vite
-
-TailwindCSS
-
-React Router
-
-React Query
-
-Axios
-
-Recharts
-
-Framer Motion
-
-Lucide React
-
-==================================================
-
-DESKTOP LAYOUT
-
-Sidebar
-
-Header
-
-Dashboard
-
-Analytics
-
-Devices
-
-History
-
-Weather
-
-Maintenance
-
-Settings
-
-Profile
-
-==================================================
-
-HEADER
-
-Display
-
-Dashboard
-
-Welcome, <User Name> 👋
-
-UTL Solar Dashboard
-
-Real-time Monitoring System
-
-On the right
-
-Current Time
-
-Current Date
-
-Plant Status
-
-Connection Status
-
-Dark / Light toggle
-
-Notification icon
-
-User avatar
-
-==================================================
-
-SIDEBAR
-
-Collapsible
-
-Icons
-
-Labels
-
-Modern hover animations
-
-Sections
-
-Dashboard
-
-Analytics
-
-Energy
-
-History
-
-Weather
-
-Maintenance
-
-Devices
-
-Settings
-
-==================================================
-
-DASHBOARD
-
-Top cards
-
-Current Solar Power
-
-Current Load
-
-Grid Import / Export
-
-Today's Generation
-
-Month Generation
-
-Year Generation
-
-Total Generation
-
-Plant Status
-
-Cards should contain
-
-Title
-
-Value
-
-Unit
-
-Small icon
-
-Trend indicator
-
-Last updated
-
-==================================================
-
-POWER FLOW
-
-This is the centerpiece.
-
-NOT emojis.
-
-Create a beautiful SVG power flow.
-
-Example
-
-           Solar
-
-             │
-
-             ▼
-
-       Inverter
-
-        ▲     ▼
-
-      Grid   Load
-
-Battery should appear ONLY if installed.
-
-Animate power flow.
-
-Moving dots.
-
-Flow direction changes.
-
-==================================================
-
-CHARTS
-
-Use Recharts.
-
-Day
-
-Month
-
-Year
-
-Total
-
-Hover tooltips.
-
-Smooth animations.
-
-==================================================
-
-ANALYTICS PAGE
-
-Production trends
-
-Performance comparison
-
-Best production day
-
-Worst production day
-
-Monthly heatmap
-
-==================================================
-
-DEVICE PAGE
-
-Plant information
-
-Inverter model
-
-Serial number
-
-Firmware
-
-Logger
-
-WiFi status
-
-RSSI
-
-Last communication
-
-==================================================
-
-HISTORY PAGE
-
-Daily history
-
-Monthly history
-
-Yearly history
-
-Export CSV
-
-==================================================
-
-WEATHER PAGE
-
-Current weather
-
-Forecast
-
-Solar irradiance
-
-Cloud cover
-
-Rain probability
-
-Temperature
-
-Wind
-
-==================================================
-
-MAINTENANCE PAGE
-
-Plant age
-
-Last cleaning
-
-Last inspection
-
-Maintenance timeline
-
-Plant Health Score
-
-==================================================
-
-NOTIFICATIONS
-
-Performance anomaly
-
-Cleaning reminder
-
-Inspection reminder
-
-Offline warning
-
-==================================================
-
-RESPONSIVE
-
-Desktop
-
-Tablet
-
-Mobile
-
-No horizontal scrolling.
-
-Cards rearrange automatically.
-
-Sidebar becomes drawer.
-
-==================================================
-
-ANIMATIONS
-
-Framer Motion
-
-Page transitions
-
-Hover animations
-
-Card animations
-
-Loading skeletons
-
-Animated charts
-
-Animated power flow
-
-==================================================
-
-THEME
-
-Dark theme default.
-
-Support light theme.
-
-Modern color palette.
-
-Avoid bright saturated colors.
-
-==================================================
-
-ACCESSIBILITY
-
-Keyboard navigation
-
-Good contrast
-
-Readable typography
-
-Responsive touch targets
-
-==================================================
-
-PROJECT STRUCTURE
-
-Use scalable architecture.
-
-components/
-
-pages/
-
-hooks/
-
-services/
-
-types/
-
-context/
-
-utils/
-
-==================================================
-
-IMPORTANT
-
-Do NOT generate backend.
-
-Do NOT generate fake authentication.
-
-Do NOT generate fake login.
-
-Do NOT invent APIs.
-
-Only create reusable frontend components.
-
-Use mock services so the backend can later replace them without changing the UI.
-
-==================================================
-
-FINAL GOAL
-
-The finished application should look like software developed by Tesla, Huawei or SolarEdge rather than a student project.
-
-Every screen should feel premium, clean and production ready.
-
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://energyscope-pro.lovable.app
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/2ffd0cbd-5741-4333-b4a9-ccea932cbae7).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+```bash
 npm run dev
 ```
+
+---
+
+## Backend
+
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+---
+
+# Environment Variables
+
+Do NOT commit:
+
+- .env
+- token.txt
+- API keys
+- Passwords
+
+All credentials must be stored using environment variables.
+
+---
+
+# Documentation
+
+Read these files before contributing:
+
+- ARCHITECTURE.md
+- PROJECT_ROADMAP.md
+- CONTRIBUTING.md
+
+These documents define the project's architecture, roadmap, and coding standards.
+
+---
+
+# Project Goals
+
+EnergyScope is designed to be:
+
+- Modern
+- Mobile-first
+- Installable as a Progressive Web App
+- Secure
+- Easy to maintain
+- Scalable
+- Free to host
+- Better than the official UTL dashboard
+
+---
+
+# Disclaimer
+
+EnergyScope is an independent project developed for educational and personal use.
+
+It is not affiliated with, endorsed by, or sponsored by UTL Solar or any related company.
+
+Users are responsible for complying with the terms of service and applicable laws when interacting with third-party services.
+
+---
+
+# License
+
+This project is currently under active development.
+
+A license will be selected before the first public release.
+
+---
+
+# Version
+
+Current Version
+
+v0.1.0 (Development)
+
+Status
+
+🚧 Work in Progress

@@ -1,0 +1,21 @@
+{
+  "lastCleaning": "2026-07-08",
+  "lastInspection": "2026-05-19",
+
+  "history": [
+    {
+      "id": "inspection-20260519",
+      "date": "2026-05-19",
+      "type": "inspection",
+      "title": "Inspection completed",
+      "note": "Recorded by user"
+    },
+    {
+      "id": "cleaning-20260708",
+      "date": "2026-07-08",
+      "type": "cleaning",
+      "title": "Panels cleaned",
+      "note": "Recorded by user"
+    }
+  ]
+}

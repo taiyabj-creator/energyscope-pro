@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Home, Sun, Zap } from "lucide-react";
+import { CalendarRange, Leaf, Sun, TrendingUp } from "lucide-react";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { EnergyChart } from "@/components/charts/EnergyChart";
 import { PowerFlow } from "@/components/widgets/PowerFlow";
@@ -13,13 +13,12 @@ export const Route = createFileRoute("/energy")({
       { title: "Energy Flow — UTL Solar Dashboard" },
       {
         name: "description",
-        content:
-          "Real-time energy routing between the solar array, inverter, grid and household load, with self-consumption breakdown.",
+        content: "Latest available AC output from the solar array and inverter.",
       },
       { property: "og:title", content: "Energy Flow — UTL Solar Dashboard" },
       {
         property: "og:description",
-        content: "Animated power flow and self-consumption balance for your solar plant.",
+        content: "Animated solar power flow and generation history for your plant.",
       },
     ],
   }),
@@ -31,11 +30,6 @@ function EnergyPage() {
   const { data: totals } = useEnergyTotals();
 
   const solar = live?.solarPower ?? 0;
-  const load = live?.loadPower ?? 0;
-  const grid = live?.gridPower ?? 0;
-  const selfUse = Math.min(solar, load);
-  const selfPct = solar > 0 ? (selfUse / solar) * 100 : 0;
-
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -48,34 +42,42 @@ function EnergyPage() {
           footnote="Live from inverter"
         />
         <MetricCard
-          title="Self-consumption"
-          value={selfPct.toFixed(0)}
-          unit="%"
-          icon={Home}
-          tone="load"
-          footnote={`${formatPower(selfUse).value} ${formatPower(selfUse).unit} used on site`}
-        />
-        <MetricCard
-          title={grid < 0 ? "Exporting" : "Importing"}
-          value={formatPower(Math.abs(grid)).value}
-          unit={formatPower(Math.abs(grid)).unit}
-          icon={Zap}
-          tone="grid"
-          footnote={grid < 0 ? "Surplus to grid" : "Deficit from grid"}
-        />
-        <MetricCard
-          title="Energy today"
+          title="Today"
           value={formatEnergy(totals?.today ?? 0).value}
           unit="kWh"
           icon={Sun}
           tone="solar"
           footnote="Cumulative since midnight"
         />
+        <MetricCard
+          title="This month"
+          value={formatEnergy(totals?.month ?? 0).value}
+          unit={formatEnergy(totals?.month ?? 0).unit}
+          icon={CalendarRange}
+          tone="solar"
+          footnote="UTL monthly chart"
+        />
+        <MetricCard
+          title="This year"
+          value={formatEnergy(totals?.year ?? 0).value}
+          unit={formatEnergy(totals?.year ?? 0).unit}
+          icon={TrendingUp}
+          tone="solar"
+          footnote="Sum of UTL yearly chart months"
+        />
+        <MetricCard
+          title="Lifetime"
+          value={formatEnergy(totals?.total ?? 0).value}
+          unit={formatEnergy(totals?.total ?? 0).unit}
+          icon={Leaf}
+          tone="solar"
+          footnote="Inverter lifetime total"
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
         <Panel delay={0.1}>
-          <PanelHeading title="Power flow" subtitle="Direction reverses automatically with surplus" />
+          <PanelHeading title="Power flow" subtitle="Solar generation and inverter output" />
           <PowerFlow />
         </Panel>
         <Panel delay={0.15}>

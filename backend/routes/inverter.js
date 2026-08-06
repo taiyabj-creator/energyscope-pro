@@ -1,8 +1,11 @@
 const express = require("express");
 const router = express.Router();
 
-const { getToken } = require("../services/utlApi");
-
+const {
+  getToken,
+  getPlantStatus,
+  getPlantId,
+} = require("../services/utlApi");
 const DEVICE_SN = "ECB50A8FF18D";
 
 router.get("/", async (req, res) => {
@@ -24,8 +27,26 @@ router.get("/", async (req, res) => {
     );
 
     const data = await response.json();
+    const plantStatus = await getPlantStatus();
+const plantId = getPlantId();
 
-    res.json(data);
+let loggerStatus = "0";
+
+if (plantStatus?.data?.online?.plantIds?.includes(plantId)) {
+  loggerStatus = "1";
+} else if (plantStatus?.data?.offline?.plantIds?.includes(plantId)) {
+  loggerStatus = "0";
+} else if (plantStatus?.data?.partiallyOffline?.plantIds?.includes(plantId)) {
+  loggerStatus = "2";
+} else if (plantStatus?.data?.incomplete?.plantIds?.includes(plantId)) {
+  loggerStatus = "3";
+}
+
+    if (data?.data) {
+  data.data.logger_status = loggerStatus;
+}
+
+res.json(data);
   } catch (err) {
     console.error(err);
     res.status(500).json({

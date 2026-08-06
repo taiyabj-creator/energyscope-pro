@@ -1,197 +1,305 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Download } from "lucide-react";
+import { Download, Printer, Search } from "lucide-react";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
 import { useDailyHistory, useMonthlyHistory, useYearlyHistory } from "@/hooks/useSolarData";
-import { downloadCsv, formatDate } from "@/utils/format";
 import { cn } from "@/lib/utils";
+import { downloadCsv, formatDate } from "@/utils/format";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
 
 export const Route = createFileRoute("/history")({
-  head: () => ({
-    meta: [
-      { title: "History — UTL Solar Dashboard" },
-      {
-        name: "description",
-        content:
-          "Daily, monthly and yearly generation history for your UTL solar plant with CSV export.",
-      },
-      { property: "og:title", content: "History — UTL Solar Dashboard" },
-      {
-        property: "og:description",
-        content: "Browse daily, monthly and yearly generation records and export them as CSV.",
-      },
-    ],
-  }),
+  head: () => ({ meta: [{ title: "History — UTL Solar Dashboard" }] }),
   component: HistoryPage,
 });
 
-type Tab = "daily" | "monthly" | "yearly";
+type Tab = "daily" | "monthly" | "yearly" | "total";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "daily", label: "Daily" },
   { key: "monthly", label: "Monthly" },
   { key: "yearly", label: "Yearly" },
+  { key: "total", label: "Total" },
 ];
 
 function HistoryPage() {
   const [tab, setTab] = useState<Tab>("daily");
-  const daily = useDailyHistory();
-  const monthly = useMonthlyHistory();
-  const yearly = useYearlyHistory();
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const daily = useDailyHistory(selectedDate);
+const monthly = useMonthlyHistory(selectedDate.getFullYear());
+const yearly = useYearlyHistory();
 
-  const loading =
-    (tab === "daily" && !daily.data) ||
-    (tab === "monthly" && !monthly.data) ||
-    (tab === "yearly" && !yearly.data);
+const total = yearly;
 
-  const exportRows = () => {
-    if (tab === "daily" && daily.data)
-      downloadCsv(
-        "utl-solar-daily-history.csv",
-        daily.data.map((r) => ({
-          Date: r.date,
-          "Generation (kWh)": r.generation,
-          "Peak power (W)": r.peakPower,
-          "Sun hours": r.sunHours,
-          Weather: r.weather,
-        })),
-      );
-    if (tab === "monthly" && monthly.data)
-      downloadCsv(
-        "utl-solar-monthly-history.csv",
-        monthly.data.map((r) => ({
-          Month: r.month,
-          "Generation (kWh)": r.generation,
-          "Best day (kWh)": r.bestDay,
-          "Average daily (kWh)": r.averageDaily,
-        })),
-      );
-    if (tab === "yearly" && yearly.data)
-      downloadCsv(
-        "utl-solar-yearly-history.csv",
-        yearly.data.map((r) => ({
-          Year: r.year,
-          "Generation (kWh)": r.generation,
-          "Average daily (kWh)": r.averageDaily,
-          "Performance ratio (%)": r.performanceRatio,
-        })),
-      );
-  };
+const rows =
+  tab === "daily"
+    ? (daily.data ?? []).map((row) => ({
+        period: row.date,
+        generation: row.generation,
+      }))
+    : tab === "monthly"
+      ? (monthly.data ?? []).map((row) => ({
+          period: row.month,
+          generation: row.generation,
+        }))
+      : tab === "yearly"
+        ? (yearly.data ?? []).map((row) => ({
+            period: row.year,
+            generation: row.generation,
+          }))
+        : (total.data ?? []).map((row) => ({
+            period: row.year,
+            generation: row.generation,
+          }));
+  const filteredRows = useMemo(
+    () => rows.filter((row) => row.period.toLowerCase().includes(search.trim().toLowerCase())),
+    [rows, search],
+  );
+  const pageSize = 20;
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const visibleRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage(1), [tab, selectedDate, search]);
+
+  const exportRows = () =>
+    downloadCsv(
+      `utl-solar-${tab}-history.csv`,
+      filteredRows.map((row) => ({
+        [tab === "daily" ? "Date" : tab === "monthly" ? "Month" : "Year"]: row.period,
+        "Generation (kWh)": row.generation,
+      })),
+    );
 
   return (
     <Panel>
       <PanelHeading
         title="Generation history"
-        subtitle="Recorded yield per period — export any view for your own records"
+        subtitle="Recorded UTL production only"
         action={
-          <button
-            type="button"
-            onClick={exportRows}
-            className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-          >
-            <Download className="size-3.5" /> Export CSV
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={exportRows}
+              className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/60"
+            >
+              <Download className="size-3.5" /> Export CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/60"
+            >
+              <Printer className="size-3.5" /> Print
+            </button>
+          </div>
         }
       />
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div
+          role="tablist"
+          aria-label="History range"
+          className="inline-flex rounded-xl border border-border/70 bg-muted/30 p-1"
+        >
+          {TABS.map((item) => (
+            <button
+              key={item.key}
+              role="tab"
+              aria-selected={tab === item.key}
+              onClick={() => setTab(item.key)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-medium",
+                tab === item.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+                        {tab === "daily" ? (
+          <input
+            type="month"
+            value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}`}
+            max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`}
+            onChange={(event) => {
+          const date = event.currentTarget.valueAsDate;
+               if (date) {
+              setSelectedDate(date);
+                }
+              }}
+            className="rounded-xl border border-border/70 bg-card px-3 py-1.5 text-xs"
+            aria-label="Select month"
+          />
+        ) : tab === "monthly" ? (
+          <input
+            type="number"
+            min="2000"
+            max={String(new Date().getFullYear())}
+            value={selectedDate.getFullYear()}
+            onChange={(event) =>
+              setSelectedDate(new Date(Number(event.target.value), 0, 1))
+            }
+            className="rounded-xl border border-border/70 bg-card px-3 py-1.5 text-xs"
+            aria-label="Select year"
+          />
+        ) : null}
+        <label className="relative min-w-48 flex-1 sm:max-w-xs">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={`Search ${tab === "daily" ? "dates" : tab === "monthly" ? "months" : "years"}`}
+            className="w-full rounded-xl border border-border/70 bg-card py-1.5 pl-8 pr-3 text-xs"
+            aria-label="Search history"
 
-      <div
-        role="tablist"
-        aria-label="History range"
-        className="mb-5 inline-flex rounded-xl border border-border/70 bg-muted/30 p-1"
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            role="tab"
-            aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-              tab === t.key
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+          />
+        </label>
       </div>
+     {(tab === "daily" && daily.isLoading) ||
+(tab === "monthly" && monthly.isLoading) ||
+((tab === "yearly" || tab === "total") && yearly.isLoading) ? (
 
-      {loading ? (
         <Skeleton className="h-72 w-full" />
       ) : (
-        <div className="scroll-slim -mx-2 overflow-x-auto px-2">
-          <table className="w-full min-w-[560px] border-collapse text-sm">
+        <>
+  <div className="mb-6 h-[320px] w-full">
+  <ResponsiveContainer width="100%" height="100%">
+        {tab === "daily" ? (
+      <AreaChart data={visibleRows}>
+        <CartesianGrid stroke="#444" strokeDasharray="3 3" />
+
+        <XAxis
+          dataKey="period"
+          tick={{ fontSize: 11 }}
+        />
+
+        <YAxis
+          tick={{ fontSize: 11 }}
+        />
+
+        <Tooltip
+          formatter={(value: number) => [
+            `${Number(value).toFixed(2)} kWh`,
+            "Generation",
+          ]}
+        />
+
+        <Area
+          type="monotone"
+          dataKey="generation"
+          stroke="var(--solar)"
+          fill="var(--solar)"
+          fillOpacity={0.25}
+          strokeWidth={2}
+        />
+      </AreaChart>
+    ) : (
+      <BarChart data={visibleRows} barCategoryGap="25%">
+        <CartesianGrid stroke="#444" strokeDasharray="3 3" />
+
+        <XAxis
+          dataKey="period"
+          tick={{ fontSize: 11 }}
+        />
+
+        <YAxis
+          tick={{ fontSize: 11 }}
+        />
+
+        <Tooltip
+          formatter={(value: number) => [
+            `${Number(value).toFixed(2)} kWh`,
+            "Generation",
+          ]}
+        />
+
+        <Bar
+          dataKey="generation"
+          fill="var(--solar)"
+          radius={[4, 4, 0, 0]}
+          maxBarSize={36}
+        />
+      </BarChart>
+    )}
+  </ResponsiveContainer>
+</div>
+        <div className="-mx-2 px-2">
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                {tab === "daily" && (
-                  <>
-                    <Th>Date</Th>
-                    <Th>Generation</Th>
-                    <Th>Peak power</Th>
-                    <Th>Sun hours</Th>
-                    <Th>Weather</Th>
-                  </>
-                )}
-                {tab === "monthly" && (
-                  <>
-                    <Th>Month</Th>
-                    <Th>Generation</Th>
-                    <Th>Best day</Th>
-                    <Th>Average daily</Th>
-                  </>
-                )}
-                {tab === "yearly" && (
-                  <>
-                    <Th>Year</Th>
-                    <Th>Generation</Th>
-                    <Th>Average daily</Th>
-                    <Th>Performance ratio</Th>
-                  </>
-                )}
+                <th className="px-3 py-2">
+  {tab === "daily"
+    ? "Date"
+    : tab === "monthly"
+      ? "Month"
+      : tab === "yearly"
+        ? "Year"
+        : "Year"}
+</th>
+                <th className="px-3 py-2">Generation</th>
               </tr>
             </thead>
             <tbody>
-              {tab === "daily" &&
-                daily.data!.map((r) => (
-                  <tr key={r.date} className="border-t border-border/50 hover:bg-muted/30">
-                    <Td>{formatDate(r.date)}</Td>
-                    <Td className="num">{r.generation.toFixed(2)} kWh</Td>
-                    <Td className="num">{r.peakPower} W</Td>
-                    <Td className="num">{r.sunHours}</Td>
-                    <Td className="text-muted-foreground">{r.weather}</Td>
-                  </tr>
-                ))}
-              {tab === "monthly" &&
-                monthly.data!.map((r) => (
-                  <tr key={r.month} className="border-t border-border/50 hover:bg-muted/30">
-                    <Td>{r.month}</Td>
-                    <Td className="num">{r.generation} kWh</Td>
-                    <Td className="num">{r.bestDay} kWh</Td>
-                    <Td className="num">{r.averageDaily} kWh</Td>
-                  </tr>
-                ))}
-              {tab === "yearly" &&
-                yearly.data!.map((r) => (
-                  <tr key={r.year} className="border-t border-border/50 hover:bg-muted/30">
-                    <Td>{r.year}</Td>
-                    <Td className="num">{r.generation} kWh</Td>
-                    <Td className="num">{r.averageDaily} kWh</Td>
-                    <Td className="num">{r.performanceRatio}%</Td>
-                  </tr>
-                ))}
+              {visibleRows.map((row) => (
+                <tr key={row.period} className="border-t border-border/50 hover:bg-muted/30">
+                  <td className="px-3 py-2.5">
+                    {tab === "daily" ? formatDate(row.period) : row.period}
+                  </td>
+                  <td className="num px-3 py-2.5">{row.generation.toFixed(2)} kWh</td>
+                </tr>
+              ))}
             </tbody>
           </table>
+          {filteredRows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {search
+                ? "No history entries match your search."
+                : "No production data is available for this period."}
+            </p>
+          ) : null}
+          {pageCount > 1 ? (
+            <div className="mt-4 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredRows.length)}{" "}
+                of {filteredRows.length}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => current - 1)}
+                  className="rounded-lg border border-border/70 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={page === pageCount}
+                  onClick={() => setPage((current) => current + 1)}
+                  className="rounded-lg border border-border/70 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
+                </>
       )}
     </Panel>
   );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 font-medium">{children}</th>;
-}
-
-function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cn("px-3 py-2.5", className)}>{children}</td>;
 }

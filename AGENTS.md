@@ -1,10 +1,22 @@
-<!-- LOVABLE:BEGIN -->
-> [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
-> published git history — force pushing, or rebasing/amending/squashing commits
-> that are already pushed — as it rewrites history on Lovable's side and the
-> user will likely lose their project history.
->
-> Commits you push to the connected branch sync back to Lovable and show up in
-> the editor, so keep the branch in a working state.
-<!-- LOVABLE:END -->
+# EnergyScope AI Instructions
+
+Read these documents before making any code changes:
+
+1. README.md
+2. ARCHITECTURE.md
+3. PROJECT_ROADMAP.md
+4. CONTRIBUTING.md
+
+These documents define the project architecture, roadmap, coding standards, and development workflow.
+
+Do not modify the architecture without justification.
+
+Do not introduce unnecessary dependencies.
+
+Always preserve API compatibility unless explicitly instructed otherwise.
+
+Prefer incremental refactoring over rewrites.
+
+The backend is the single source of truth.
+
+The frontend must never communicate directly with the UTL API.

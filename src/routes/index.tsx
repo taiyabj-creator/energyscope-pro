@@ -1,16 +1,6 @@
+import { motion } from "framer-motion";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Activity,
-  CalendarRange,
-  Cpu,
-  Gauge,
-  Home,
-  Leaf,
-  Sun,
-  Sunrise,
-  TrendingUp,
-  Zap,
-} from "lucide-react";
+import { Activity, CalendarRange, Cpu, Gauge, Leaf, Sun, Sunrise, TrendingUp } from "lucide-react";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { EnergyChart } from "@/components/charts/EnergyChart";
 import { PowerFlow } from "@/components/widgets/PowerFlow";
@@ -21,9 +11,14 @@ import {
   useLivePower,
   useLogger,
   usePlantInfo,
+  usePrediction,
   useWeatherNow,
 } from "@/hooks/useSolarData";
+import { useAlerts } from "@/hooks/useAlerts";
 import { formatEnergy, formatPower, trendPct } from "@/utils/format";
+import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
+import { getCapacityPercentage } from "@/utils/capacity";
+import { DashboardSkeleton } from "@/components/dashboard/loading/DashboardSkeleton";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -31,13 +26,13 @@ export const Route = createFileRoute("/")({
       { title: "Live Dashboard — UTL Solar Monitoring" },
       {
         name: "description",
-        content:
-          "Live solar power, household load, grid import/export and today's yield for a 4.305 kW UTL on-grid plant.",
+        content: "Live solar power and today's yield for your UTL solar plant.",
       },
       { property: "og:title", content: "Live Dashboard — UTL Solar Monitoring" },
       {
         property: "og:description",
-        content: "Animated power flow, live metrics and generation charts for your UTL solar plant.",
+        content:
+          "Animated power flow, live metrics and generation charts for your UTL solar plant.",
       },
     ],
   }),
@@ -51,15 +46,49 @@ function DashboardPage() {
   const { data: inverter } = useInverter();
   const { data: logger } = useLogger();
   const { data: weather } = useWeatherNow();
+  const { alerts, count } = useAlerts();
+  const { data: prediction } = usePrediction();
 
   const solar = formatPower(live?.solarPower ?? 0);
-  const load = formatPower(live?.loadPower ?? 0);
-  const grid = formatPower(Math.abs(live?.gridPower ?? 0));
-  const exporting = (live?.gridPower ?? 0) < 0;
-  const updated = live ? new Date(live.timestamp).toLocaleTimeString("en-GB", { hour12: false }) : "—";
+  const capacityPercentage = getCapacityPercentage(live?.solarPower ?? 0, plant?.capacityKw);
+  const freshness = formatMeasurementFreshness(live?.timestamp);
+  if (
+  isLoading &&
+  !live &&
+  !totals &&
+  !plant &&
+  !inverter
+) {
+  return <DashboardSkeleton />;
+}
 
   return (
-    <div className="space-y-6">
+  <motion.div
+    className="space-y-6"
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{
+      duration: 0.45,
+      ease: "easeOut",
+    }}
+    
+  >
+
+  {count > 0 && (
+    <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
+      <h3 className="text-sm font-semibold text-red-400">
+        {count} Active Alert{count > 1 ? "s" : ""}
+      </h3>
+
+      <ul className="mt-2 space-y-1 text-sm">
+        {alerts.map((alert) => (
+          <li key={alert.id}>
+            <strong>{alert.title}</strong> — {alert.description}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Current solar power"
@@ -67,29 +96,9 @@ function DashboardPage() {
           unit={solar.unit}
           icon={Sun}
           tone="solar"
-          footnote={`Updated ${updated}`}
+          footnote={`${capacityPercentage ?? "Not supported"}${capacityPercentage === null ? "" : "% of installed capacity"} · ${freshness}`}
           loading={isLoading}
           delay={0}
-        />
-        <MetricCard
-          title="Current load"
-          value={load.value}
-          unit={load.unit}
-          icon={Home}
-          tone="load"
-          footnote={`Updated ${updated}`}
-          loading={isLoading}
-          delay={0.05}
-        />
-        <MetricCard
-          title={exporting ? "Grid export" : "Grid import"}
-          value={grid.value}
-          unit={grid.unit}
-          icon={Zap}
-          tone="grid"
-          footnote={exporting ? "Surplus feeding the grid" : "Drawing from the grid"}
-          loading={isLoading}
-          delay={0.1}
         />
         <MetricCard
           title="Today's generation"
@@ -99,8 +108,35 @@ function DashboardPage() {
           tone="solar"
           trend={totals ? trendPct(totals.today, totals.todayPrevious) : null}
           footnote="vs yesterday"
+          delay={0.1}
+        />
+                <MetricCard
+          title="Expected Today"
+          value={prediction?.expectedToday?.toFixed(2) ?? "--"}
+          unit="kWh"
+          icon={TrendingUp}
+          tone="primary"
+          footnote={
+          prediction
+          ? `${prediction.difference >= 0 ? "+" : ""}${prediction.difference.toFixed(2)} kWh ${prediction.differenceLabel} • ${prediction.forecastPercent}% of forecast`
+        : "Calculating..."
+}
           delay={0.15}
         />
+
+        <MetricCard
+  title="Solar Performance"
+  value={prediction?.performance.score ?? "--"}
+  unit="%"
+  icon={Gauge}
+  tone="solar"
+  footnote={
+    prediction
+      ? `${prediction.performance.status} • Weather-adjusted`
+      : "Calculating..."
+  }
+  delay={0.2}
+/>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
@@ -111,7 +147,7 @@ function DashboardPage() {
         <Panel delay={0.25}>
           <PanelHeading
             title="Live power flow"
-            subtitle="Energy routing between array, inverter, grid and home"
+            subtitle="Latest available AC output from the solar array"
             action={
               <Chip tone={(live?.solarPower ?? 0) > 40 ? "positive" : "default"}>
                 <StatusDot status={(live?.solarPower ?? 0) > 40 ? "online" : "warning"} />
@@ -151,13 +187,13 @@ function DashboardPage() {
           delay={0.4}
         />
         <MetricCard
-          title="Inverter efficiency"
-          value={(inverter?.efficiencyPct ?? 0).toFixed(1)}
-          unit="%"
-          icon={Gauge}
-          footnote={`${inverter?.temperatureC.toFixed(1) ?? "—"} °C internal`}
-          delay={0.45}
-        />
+  title="Today's Rank"
+  value={prediction?.rank?.label ?? "--"}
+  icon={TrendingUp}
+  tone="primary"
+  footnote={prediction?.rank?.subtitle ?? "Calculating..."}
+  delay={0.45}
+/>
       </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
@@ -179,10 +215,11 @@ function DashboardPage() {
               value={
                 <span className="inline-flex items-center gap-2">
                   <StatusDot status={logger?.status ?? "warning"} />
-                  {logger?.lastCommunication ?? "—"}
+                  {logger?.status === "online" ? "Online" : "Offline"}
                 </span>
               }
             />
+            <Row label="Measurements" value={freshness} />
             <Row label="Signal" value={`${logger?.rssiDbm ?? "—"} dBm`} />
             <Row label="Capacity" value={`${plant?.capacityKw ?? "—"} kW · on-grid`} />
           </ul>
@@ -191,12 +228,21 @@ function DashboardPage() {
         <Panel delay={0.55}>
           <PanelHeading title="Conditions now" subtitle={plant?.location ?? ""} />
           <div className="grid grid-cols-2 gap-4">
-            <Stat label="Condition" value={weather?.condition ?? "—"} />
-            <Stat label="Temperature" value={`${weather?.temperatureC ?? "—"} °C`} />
-            <Stat label="Irradiance" value={`${weather?.irradianceWm2 ?? "—"} W/m²`} />
-            <Stat label="Cloud cover" value={`${weather?.cloudCoverPct ?? "—"} %`} />
-            <Stat label="Sunrise" value={weather?.sunrise ?? "—"} />
-            <Stat label="Sunset" value={weather?.sunset ?? "—"} />
+            <Stat label="Condition" value={weather?.condition ?? "Not provided"} />
+            <Stat
+              label="Temperature"
+              value={weather ? `${weather.temperatureC} °C` : "Not provided"}
+            />
+            <Stat
+              label="Pressure"
+              value={weather ? `${weather.pressureHpa.toFixed(0)} hPa` : "Not provided"}
+            />
+            <Stat
+              label="Cloud cover"
+              value={weather ? `${weather.cloudCoverPct} %` : "Not provided"}
+            />
+            <Stat label="Sunrise" value={weather?.sunrise ?? "Not provided"} />
+            <Stat label="Sunset" value={weather?.sunset ?? "Not provided"} />
           </div>
         </Panel>
 
@@ -207,6 +253,7 @@ function DashboardPage() {
             <Stat label="Frequency" value={`${inverter?.acFrequency.toFixed(2) ?? "—"} Hz`} />
             <Stat label="DC voltage" value={`${inverter?.dcVoltage.toFixed(1) ?? "—"} V`} />
             <Stat label="DC current" value={`${inverter?.dcCurrent.toFixed(1) ?? "—"} A`} />
+
             <Stat label="Firmware" value={inverter?.firmware ?? "—"} />
             <Stat label="Serial" value={inverter?.serial ?? "—"} />
           </div>
@@ -216,13 +263,16 @@ function DashboardPage() {
         </Panel>
       </div>
 
-      <Panel delay={0.65} className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+      <Panel
+        delay={0.65}
+        className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground"
+      >
         <span className="inline-flex items-center gap-2">
-          <Activity className="size-3.5" /> Values refresh every 5 seconds
+          <Activity className="size-3.5" /> Values refresh every 60 seconds
         </span>
-        <span>Mock data source — replaceable by the UTL API without UI changes</span>
+        <span>Measurements and generation are supplied by the UTL backend.</span>
       </Panel>
-    </div>
+    </motion.div>
   );
 }
 

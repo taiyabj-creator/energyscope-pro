@@ -59,7 +59,7 @@ async function loadPlantId() {
     data.data.total.plantIds.length > 0
   ) {
     plantId = data.data.total.plantIds[0];
-    console.log("✓ Plant ID:", plantId);
+   
   } else {
     throw new Error("No plant found.");
   }

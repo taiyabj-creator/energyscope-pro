@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   Cpu,
   CloudSun,
+  Stethoscope,
   LayoutDashboard,
   Settings,
   Sun,
@@ -23,6 +24,7 @@ export const navItems = [
   { to: "/weather", label: "Weather", icon: CloudSun },
   { to: "/maintenance", label: "Maintenance", icon: Wrench },
   { to: "/devices", label: "Devices", icon: Cpu },
+  { to: "/diagnostics", label: "Diagnostics", icon: Stethoscope },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -35,7 +37,7 @@ export function SidebarNav({
   collapsed: boolean;
   onToggle?: () => void;
   onNavigate?: () => void;
-  capacityKw: number;
+  capacityKw: number | undefined;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -48,7 +50,9 @@ export function SidebarNav({
         {!collapsed && (
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold tracking-tight">UTL Solar</p>
-            <p className="truncate text-[11px] text-muted-foreground">{capacityKw} kW · On-grid</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {capacityKw ?? "—"} kW · On-grid
+            </p>
           </div>
         )}
       </div>

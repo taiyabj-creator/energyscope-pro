@@ -1,14 +1,18 @@
-import { AuthProvider } from "@/context/AuthContext";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
+  Navigate,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { DashboardAuthProvider } from "@/context/DashboardAuthContext";
+import { useDashboardAuth } from "@/context/DashboardAuthContext";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -84,12 +88,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Premium monitoring for a 4.305 kW UTL on-grid solar plant: live power flow, generation analytics, weather intelligence and maintenance health.",
+          "Premium monitoring for a UTL solar plant: live power flow, generation analytics, weather intelligence and maintenance health.",
       },
       { property: "og:title", content: "UTL Solar Dashboard" },
       {
         property: "og:description",
-        content: "Live power flow, generation analytics and plant health for your UTL solar system.",
+        content:
+          "Live power flow, generation analytics and plant health for your UTL solar system.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -104,6 +109,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -125,19 +132,42 @@ function RootShell({ children }: { children: ReactNode }) {
     </html>
   );
 }
+  function ProtectedApp() {
+  const { loggedIn } = useDashboardAuth();
+  const location = useLocation();
 
-function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const isLoginPage = location.pathname === "/login";
+
+  if (!loggedIn && !isLoginPage) {
+    return <Navigate to="/login" />;
+  }
+
+  if (loggedIn && isLoginPage) {
+    return <Navigate to="/" />;
+  }
+
+  if (isLoginPage) {
+    return <Outlet />;
+  }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AppShell>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-        </AppShell>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </ThemeProvider>
   );
 }
 
+function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
+  
+
+  return (
+   <QueryClientProvider client={queryClient}>
+  <DashboardAuthProvider>
+    <ProtectedApp />
+  </DashboardAuthProvider>
+</QueryClientProvider>
+  );
+}

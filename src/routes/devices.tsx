@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Cpu, Radio, Signal, Wifi } from "lucide-react";
 import { Chip, Panel, PanelHeading, StatusDot } from "@/components/ui/primitives";
-import { useInverter, useLogger, usePlantInfo } from "@/hooks/useSolarData";
-import { formatDate } from "@/utils/format";
+import { useEnergyTotals, useInverter, useLogger, usePlantInfo } from "@/hooks/useSolarData";
+import { formatDate, formatEnergy } from "@/utils/format";
+import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
 
 export const Route = createFileRoute("/devices")({
   head: () => ({
@@ -27,9 +28,19 @@ function DevicesPage() {
   const { data: plant } = usePlantInfo();
   const { data: inverter } = useInverter();
   const { data: logger } = useLogger();
+  const { data: totals } = useEnergyTotals();
 
-  const rssi = logger?.rssiDbm ?? -100;
-  const rssiQuality = rssi > -60 ? "Excellent" : rssi > -70 ? "Good" : rssi > -80 ? "Fair" : "Weak";
+  const rssi = logger?.rssiDbm;
+  const rssiQuality =
+    rssi === undefined
+      ? "Not provided"
+      : rssi > -60
+        ? "Excellent"
+        : rssi > -70
+          ? "Good"
+          : rssi > -80
+            ? "Fair"
+            : "Weak";
 
   return (
     <div className="space-y-6">
@@ -79,13 +90,27 @@ function DevicesPage() {
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
             <Item label="Firmware" value={inverter?.firmware ?? "—"} />
-            <Item label="Efficiency" value={`${inverter?.efficiencyPct ?? "—"} %`} />
+            <Item
+              label="Daily generation"
+              value={
+                totals
+                  ? `${formatEnergy(totals.today).value} ${formatEnergy(totals.today).unit}`
+                  : "—"
+              }
+            />
+            <Item
+              label="Lifetime generation"
+              value={
+                totals
+                  ? `${formatEnergy(totals.total).value} ${formatEnergy(totals.total).unit}`
+                  : "—"
+              }
+            />
             <Item label="AC voltage" value={`${inverter?.acVoltage.toFixed(1) ?? "—"} V`} />
             <Item label="AC frequency" value={`${inverter?.acFrequency.toFixed(2) ?? "—"} Hz`} />
             <Item label="DC voltage" value={`${inverter?.dcVoltage.toFixed(1) ?? "—"} V`} />
             <Item label="DC current" value={`${inverter?.dcCurrent.toFixed(1) ?? "—"} A`} />
             <Item label="Temperature" value={`${inverter?.temperatureC.toFixed(1) ?? "—"} °C`} />
-            <Item label="Battery port" value="No battery installed" />
           </dl>
         </Panel>
 
@@ -106,19 +131,29 @@ function DevicesPage() {
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{logger?.model ?? "—"}</p>
-              <p className="truncate text-xs text-muted-foreground">Serial {logger?.serial ?? "—"}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                Serial {logger?.serial ?? "—"}
+              </p>
             </div>
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
             <Item label="Firmware" value={logger?.firmware ?? "—"} />
             <Item label="WiFi network" value={logger?.wifiSsid ?? "—"} icon={Wifi} />
-            <Item label="Signal (RSSI)" value={`${rssi} dBm · ${rssiQuality}`} icon={Signal} />
-            <Item label="Last communication" value={logger?.lastCommunication ?? "—"} />
+            <Item
+              label="Signal (RSSI)"
+              value={rssi === undefined ? "Not provided" : `${rssi} dBm · ${rssiQuality}`}
+              icon={Signal}
+            />
+            <Item label="MAC address" value={logger?.serial ?? "—"} />
+            <Item
+              label="Latest measurement"
+              value={formatMeasurementFreshness(logger?.lastCommunication)}
+            />
           </dl>
           <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-positive"
-              style={{ width: `${Math.min(100, Math.max(0, 2 * (rssi + 100)))}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, 2 * ((rssi ?? -100) + 100)))}%` }}
             />
           </div>
         </Panel>
@@ -127,15 +162,7 @@ function DevicesPage() {
   );
 }
 
-function Item({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon?: typeof Wifi;
-}) {
+function Item({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof Wifi }) {
   return (
     <div className="min-w-0">
       <dt className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">

@@ -12,18 +12,13 @@ import {
   Info,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
-import { useLivePower, useLogger, useNotifications, usePlantInfo } from "@/hooks/useSolarData";
+import { useLivePower, useLogger, usePlantInfo } from "@/hooks/useSolarData";
+import { useAlerts } from "@/hooks/useAlerts";
 import { Chip, StatusDot } from "@/components/ui/primitives";
-import type { NotificationItem } from "@/types/solar";
-import { cn } from "@/lib/utils";
 
-const kindIcon = {
-  anomaly: AlertTriangle,
-  cleaning: Droplets,
-  inspection: CalendarCheck,
-  offline: WifiOff,
-  info: Info,
-} as const;
+import { cn } from "@/lib/utils";
+import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
+
 
 function useClock() {
   const [now, setNow] = useState<Date | null>(null);
@@ -41,7 +36,7 @@ export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar:
   const { data: plant } = usePlantInfo();
   const { data: live } = useLivePower();
   const { data: logger } = useLogger();
-  const { data: notifications } = useNotifications();
+  const { alerts, count } = useAlerts();
   const [openNotifications, setOpenNotifications] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
 
@@ -59,8 +54,8 @@ export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar:
     };
   }, [openNotifications]);
 
-  const unread = (notifications ?? []).filter((n) => n.unread).length;
-  const producing = (live?.solarPower ?? 0) > 40;
+  const unread = count;
+  const freshness = formatMeasurementFreshness(live?.timestamp);
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-xl">
@@ -100,14 +95,13 @@ export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar:
           </div>
 
           <div className="hidden items-center gap-2 md:flex">
-            <Chip tone={producing ? "positive" : "default"}>
-              <StatusDot status={producing ? "online" : "warning"} />
-              {producing ? "Producing" : "Standby"}
-            </Chip>
             <Chip tone={logger?.status === "online" ? "positive" : "warning"}>
-              <StatusDot status={logger?.status ?? "warning"} />
-              {logger?.status === "online" ? "Connected" : "Reconnecting"}
+              <StatusDot status={logger?.status === "online" ? "online" : "offline"} />
+              Logger {logger?.status === "online" ? "Online" : "Offline"}
             </Chip>
+            {logger?.status === "online" ? (
+              <span className="text-xs text-muted-foreground">{freshness}</span>
+            ) : null}
           </div>
 
           <button
@@ -144,38 +138,39 @@ export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar:
                   className="panel-solid absolute right-0 top-12 z-40 w-[min(92vw,22rem)] overflow-hidden p-0"
                 >
                   <p className="border-b border-border/60 px-4 py-3 text-sm font-semibold">
-                    Notifications
-                  </p>
-                  <ul className="scroll-slim max-h-80 divide-y divide-border/60 overflow-y-auto">
-                    {(notifications ?? []).map((n: NotificationItem) => {
-                      const Icon = kindIcon[n.kind];
-                      return (
-                        <li key={n.id} className="flex gap-3 px-4 py-3">
-                          <span
-                            className={cn(
-                              "mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg",
-                              n.kind === "anomaly"
-                                ? "bg-destructive/12 text-destructive"
-                                : n.kind === "cleaning"
-                                  ? "bg-primary/12 text-primary"
-                                  : n.kind === "inspection"
-                                    ? "bg-warning/12 text-warning"
-                                    : "bg-muted text-muted-foreground",
-                            )}
-                          >
-                            <Icon className="size-3.5" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[13px] font-medium">{n.title}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{n.detail}</p>
-                            <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              {n.time}
-                            </p>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+  Notifications
+</p>
+
+<ul className="scroll-slim max-h-80 divide-y divide-border/60 overflow-y-auto">
+  {alerts.length === 0 ? (
+    <li className="px-4 py-8 text-center text-sm text-muted-foreground">
+      No active alerts 🎉
+    </li>
+  ) : (
+    alerts.map((n) => (
+      <li key={n.id} className="flex gap-3 px-4 py-3">
+        <span
+          className={cn(
+            "mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg",
+            n.severity === "error"
+              ? "bg-destructive/12 text-destructive"
+              : "bg-warning/12 text-warning"
+          )}
+        >
+          <AlertTriangle className="size-3.5" />
+        </span>
+
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium">{n.title}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {n.description}
+          </p>
+        </div>
+      </li>
+    ))
+  )}
+</ul>
+
                 </motion.div>
               )}
             </AnimatePresence>

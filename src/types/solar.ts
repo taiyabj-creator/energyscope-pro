@@ -6,10 +6,6 @@ export interface LivePowerSnapshot {
   timestamp: string;
   /** Watts produced by the PV array */
   solarPower: number;
-  /** Watts consumed by the site */
-  loadPower: number;
-  /** Positive = importing from grid, negative = exporting to grid (Watts) */
-  gridPower: number;
   plantStatus: PlantStatus;
 }
 
@@ -36,13 +32,13 @@ export interface PlantInfo {
   name: string;
   ownerName: string;
   capacityKw: number;
-  systemType: "on-grid" | "hybrid" | "off-grid";
+  systemType?: "on-grid" | "hybrid" | "off-grid";
   location: string;
   latitude: number;
   longitude: number;
   installationDate: string;
-  tiltDegrees: number;
-  azimuth: string;
+  tiltDegrees?: number;
+  azimuth?: string;
 }
 
 export interface InverterInfo {
@@ -55,7 +51,6 @@ export interface InverterInfo {
   dcVoltage: number;
   dcCurrent: number;
   temperatureC: number;
-  efficiencyPct: number;
 }
 
 export interface LoggerInfo {
@@ -80,23 +75,16 @@ export type EnergyRange = "day" | "month" | "year" | "total";
 export interface DailyHistoryRow {
   date: string;
   generation: number;
-  peakPower: number;
-  sunHours: number;
-  weather: string;
 }
 
 export interface MonthlyHistoryRow {
   month: string;
   generation: number;
-  bestDay: number;
-  averageDaily: number;
 }
 
 export interface YearlyHistoryRow {
   year: string;
   generation: number;
-  averageDaily: number;
-  performanceRatio: number;
 }
 
 export interface HeatmapCell {
@@ -110,33 +98,62 @@ export interface AnalyticsSummary {
   worstDay: { date: string; generation: number };
   averageDaily: number;
   specificYield: number;
-  performanceRatio: number;
+  performanceRatio: null;
   monthOverMonthPct: number;
+}
+
+export interface AnalyticsData {
+  summary: AnalyticsSummary | null;
+  monthlyTrend: SeriesPoint[];
+  heatmap: HeatmapCell[];
+  currentMonthAverage: number | null;
 }
 
 export interface WeatherNow {
   condition: string;
+  weatherCode: number;
   temperatureC: number;
   feelsLikeC: number;
   humidityPct: number;
   windKph: number;
   windDirection: string;
   cloudCoverPct: number;
-  irradianceWm2: number;
   rainProbabilityPct: number;
+  pressureHpa: number;
   uvIndex: number;
   sunrise: string;
   sunset: string;
+  windGustsKph: number;
+  precipitationMm: number;
 }
 
-export interface WeatherForecastDay {
-  day: string;
-  condition: string;
+export interface WeatherHour {
+  time: string;
+  weatherCode: number;
+  temperatureC: number;
+  rainProbabilityPct: number;
+  cloudCoverPct: number;
+}
+
+export interface WeatherDay {
+  date: string;
+  weatherCode: number;
   highC: number;
   lowC: number;
-  cloudCoverPct: number;
   rainProbabilityPct: number;
-  expectedKwh: number;
+  windSpeedKph: number;
+  uvIndex: number;
+  cloudCoverPct: number;
+  precipitationMm: number;
+  sunrise: string;
+  sunset: string;
+  daylightDurationS: number;
+}
+
+export interface WeatherData {
+  current: WeatherNow;
+  hourly: WeatherHour[];
+  daily: WeatherDay[];
 }
 
 export interface MaintenanceEvent {
@@ -149,9 +166,17 @@ export interface MaintenanceEvent {
 
 export interface MaintenanceState {
   installationDate: string;
+
   lastCleaning: string;
   lastInspection: string;
   healthScore: number;
+
+  nextCleaning: string;
+  nextInspection: string;
+
+  cleaningDueIn: number;
+  inspectionDueIn: number;
+  
   healthFactors: { label: string; score: number; weightPct: number }[];
   timeline: MaintenanceEvent[];
 }
