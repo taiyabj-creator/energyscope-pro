@@ -83,6 +83,8 @@ function getPlantId() {
   return plantId;
 }
 async function getPlantStatus(utlToken) {
+  console.log("UTL token:", utlToken.substring(0, 40));
+
   const response = await fetch(
     "https://utlsolarrms.com/api/plantStatus",
     {
@@ -95,8 +97,15 @@ async function getPlantStatus(utlToken) {
     }
   );
 
-  return response.json();
+  console.log("Status:", response.status);
+
+  const text = await response.text();
+
+  console.log("Response body:", text);
+
+  return JSON.parse(text);
 }
+
 
 module.exports = {
   login,
