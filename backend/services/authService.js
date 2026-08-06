@@ -7,6 +7,8 @@ const sessionService = require("./sessionService");
 async function login(email, password) {
   const response = await pythonAdapter.login(email, password);
 
+  console.log(response);
+
   if (!response.success) {
     throw new Error(response.message || "Invalid email or password.");
   }
@@ -21,10 +23,22 @@ async function login(email, password) {
     }
   );
 
+  // Convert values like "365d" into milliseconds
+  const match = /^(\d+)d$/.exec(response.expires_in);
+
+  if (!match) {
+    throw new Error(`Unsupported expires_in format: ${response.expires_in}`);
+  }
+
+  const expiresAt =
+    Date.now() + Number(match[1]) * 24 * 60 * 60 * 1000;
+
   sessionService.createSession(dashboardToken, {
     email,
+    device_id: crypto.randomUUID(),
     utlToken: response.token,
-    expiresAt: Date.now() + (response.expires_in * 1000),
+    expiresAt,
+    remember_me: true,
   });
 
   return {
