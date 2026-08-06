@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const { login } = require("./services/utlApi");
 
 const chartsRouter = require("./routes/charts");
 const configRouter = require("./routes/config");
@@ -42,6 +43,14 @@ app.use("/api/auth", authRouter);
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+
+  try {
+    await login();
+    console.log("✓ Login completed");
+  } catch (err) {
+    console.error("Startup login failed:");
+    console.error(err);
+  }
 });
