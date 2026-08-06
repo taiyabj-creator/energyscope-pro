@@ -38,6 +38,9 @@ async function login(
     Date.now() + Number(match[1]) * 24 * 60 * 60 * 1000;
 
   sessionService.createSession(dashboardToken, {
+console.log("Creating dashboard session...");
+console.log("Dashboard session created.");
+
     email,
     device_id: crypto.randomUUID(),
     utlToken: response.token,
