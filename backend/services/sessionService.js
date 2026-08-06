@@ -61,6 +61,16 @@ function createSession(sessionId, data) {
 function getSession(sessionId) {
   const row = getStmt.get(sessionId);
 
+  console.log(
+  "Looking for token:",
+  sessionId.substring(0, 40)
+);
+
+console.log(
+  "Database row:",
+  row
+);
+
   if (!row) {
     return null;
   }

@@ -13,6 +13,8 @@ function authMiddleware(req, res, next) {
 
   const token = header.replace("Bearer ", "");
 
+  console.log("JWT:", token.substring(0, 40));
+
   try {
     const payload = jwt.verify(
       token,
@@ -20,6 +22,8 @@ function authMiddleware(req, res, next) {
     );
 
     const session = sessionService.getSession(token);
+
+    console.log("Session lookup:", session);
 
     if (!session) {
       return res.status(401).json({
