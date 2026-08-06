@@ -30,26 +30,27 @@ async function callChart(endpoint, dateParameter = null) {
   
 
   const response = await fetch(
-    `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-Device-ID": "hbeon_mobile",
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(body),
-    }
-  );
+  `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Device-ID": "hbeon_mobile",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  }
+);
 
-  
 
-  const data = await response.json();
 
-  
+const text = await response.text();
+const data = JSON.parse(text);
 
-  return data;
+return data;
+
+
 }
 
 router.get("/daily", async (req, res) => {
