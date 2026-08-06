@@ -19,7 +19,11 @@ router.get("/csv", async (req, res) => {
       req.query.year ||
       String(now.getFullYear());
 
-    const data = await getExportData(month, year);
+    const data = await getExportData(
+      req.session.utlToken,
+      month,
+      year
+    );
 
 const csv = generateCsv(data);
 
@@ -53,7 +57,11 @@ router.get("/excel", async (req, res) => {
       req.query.year ||
       String(now.getFullYear());
 
-    const data = await getExportData(month, year);
+    const data = await getExportData(
+      req.session.utlToken,
+      month,
+      year
+    );
 
     const excel = await generateExcel(data);
 

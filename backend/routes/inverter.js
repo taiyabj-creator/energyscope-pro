@@ -15,7 +15,7 @@ router.get("/", async (req, res) => {
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${getToken()}`,
+          Authorization: `Bearer ${req.session.utlToken}`,
           "X-Device-ID": "hbeon_mobile",
           "Content-Type": "application/json",
           Accept: "application/json",
