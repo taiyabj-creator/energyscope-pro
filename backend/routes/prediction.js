@@ -19,7 +19,11 @@ router.get("/today", async (req, res) => {
 
     const year = String(now.getFullYear());
 
-    const data = await getExportData(month, year);
+    const data = await getExportData(
+      req.session.utlToken,
+      month,
+     year
+    );
     console.log(
       "Monthly response:",
       JSON.stringify(data.monthly, null, 2)
@@ -66,7 +70,10 @@ const performance = buildPerformanceScore({
   daysWithoutRain: weather.rainProbability > 70 ? 0 : 5,
 });
 
-const history = await getLast30DaysGeneration(now);
+const history = await getLast30DaysGeneration(
+  req.session.utlToken,
+  now
+);
 
 const comparisonValue =
   now.getHours() < sunsetHour
