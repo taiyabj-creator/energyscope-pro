@@ -82,13 +82,13 @@ function getToken() {
 function getPlantId() {
   return plantId;
 }
-async function getPlantStatus(token) {
+async function getPlantStatus(utlToken) {
   const response = await fetch(
     "https://utlsolarrms.com/api/plantStatus",
     {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${utlToken}`,
         "X-Device-ID": "hbeon_mobile",
         Accept: "application/json",
       },
@@ -97,6 +97,7 @@ async function getPlantStatus(token) {
 
   return response.json();
 }
+
 module.exports = {
   login,
   getToken,
