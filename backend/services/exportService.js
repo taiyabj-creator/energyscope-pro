@@ -27,20 +27,26 @@ const body = {
   }
 
   const response = await fetch(
-    `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${utlToken}`,
-        "X-Device-ID": "hbeon_mobile",
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(body),
-    }
-  );
+  `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${utlToken}`,
+      "X-Device-ID": "hbeon_mobile",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  }
+);
 
-  return response.json();
+console.log("Chart status:", response.status);
+
+const text = await response.text();
+
+console.log("Chart response:", text);
+
+return JSON.parse(text);
 }
 
 async function getExportData(utlToken, month, year) {
