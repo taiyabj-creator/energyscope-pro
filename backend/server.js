@@ -99,11 +99,6 @@ app.listen(PORT, async () => {
     cleanupExpiredSessions();
   }, 30 * 60 * 1000);
 
-  try {
-    await login();
-    console.log("✓ Login completed");
-  } catch (err) {
-    console.error("Startup login failed:");
-    console.error(err);
-  }
+    // Startup login removed.
+  // Authentication is performed through /api/auth/login when users sign in.
 });

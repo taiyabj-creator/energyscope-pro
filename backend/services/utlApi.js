@@ -1,12 +1,22 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
+const path = require("path");
 
 let token = null;
 let plantId = null;
+const PYTHON_SCRIPT = path.join(
+  __dirname,
+  "../adapters/python/utl_api.py"
+);
+
+const TOKEN_FILE = path.join(
+  __dirname,
+  "../adapters/python/token.txt"
+);
 
 async function login() {
   return new Promise((resolve, reject) => {
-    const py = spawn("python3", ["/home/taiyab/UTL/utl_api.py"]);
+    const py = spawn("python3", [PYTHON_SCRIPT]);
 
     py.stdout.on("data", (data) => {
       process.stdout.write(data);
@@ -23,8 +33,8 @@ async function login() {
 
       try {
         token = fs
-          .readFileSync("/home/taiyab/UTL/token.txt", "utf8")
-          .trim();
+  .readFileSync(TOKEN_FILE, "utf8")
+  .trim();
 
         await loadPlantId();
 
