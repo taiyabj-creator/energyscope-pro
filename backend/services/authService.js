@@ -37,16 +37,17 @@ async function login(
   const expiresAt =
     Date.now() + Number(match[1]) * 24 * 60 * 60 * 1000;
 
-  sessionService.createSession(dashboardToken, {
-console.log("Creating dashboard session...");
-console.log("Dashboard session created.");
+  console.log("Creating dashboard session...");
 
-    email,
-    device_id: crypto.randomUUID(),
-    utlToken: response.token,
-    expiresAt,
-    remember_me: rememberMe,
-  });
+sessionService.createSession(dashboardToken, {
+  email,
+  device_id: crypto.randomUUID(),
+  utlToken: response.token,
+  expiresAt,
+  remember_me: rememberMe,
+});
+
+console.log("Dashboard session created.");
 
   return {
     success: true,
