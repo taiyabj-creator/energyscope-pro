@@ -6,6 +6,10 @@ function monthKey(date) {
 
 async function postChart(utlToken, endpoint, dateParameter = null) {
   const plantStatus = await getPlantStatus(utlToken);
+console.log(
+  "Plant status response:",
+  JSON.stringify(plantStatus, null, 2)
+);
 
 const plantId =
   plantStatus?.data?.total?.plantIds?.[0];
