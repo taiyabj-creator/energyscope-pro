@@ -190,11 +190,11 @@ async function enableNotifications() {
 
   <button
     type="button"
-    onClick={() => {
-  logout();
-  localStorage.removeItem("utl_token");
-  navigate({ to: "/login" });
-    }}
+    onClick={async () => {
+     await logout();
+     localStorage.removeItem("utl_token");
+     navigate({ to: "/login" });
+      }}
     className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400 transition hover:bg-red-500/20"
   >
     <LogOut className="size-4" />

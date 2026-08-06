@@ -5,7 +5,10 @@ import {
   ReactNode,
 } from "react";
 
-import { clearAuthToken } from "@/api/client";
+import {
+  clearAuthToken,
+  logoutRequest,
+} from "@/api/client";
 
 type DashboardAuthContextType = {
   loggedIn: boolean;
@@ -36,7 +39,13 @@ export function DashboardAuthProvider({
   setLoggedIn(true);
 }
 
-function logout() {
+async function logout() {
+  try {
+    await logoutRequest();
+  } catch (err) {
+    console.warn("Logout request failed:", err);
+  }
+
   clearAuthToken();
   setLoggedIn(false);
 }

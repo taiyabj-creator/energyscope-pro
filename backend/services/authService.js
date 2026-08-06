@@ -7,7 +7,7 @@ const sessionService = require("./sessionService");
 async function login(email, password) {
   const response = await pythonAdapter.login(email, password);
 
-  console.log(response);
+ 
 
   if (!response.success) {
     throw new Error(response.message || "Invalid email or password.");
@@ -46,7 +46,11 @@ async function login(email, password) {
     token: dashboardToken,
   };
 }
+async function logout(token) {
+  sessionService.deleteSession(token);
+}
 
 module.exports = {
   login,
+  logout,
 };

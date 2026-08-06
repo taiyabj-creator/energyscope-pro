@@ -69,3 +69,9 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 
   return response.json();
 }
+
+export async function logoutRequest() {
+  return apiRequest("/auth/logout", {
+    method: "POST",
+  });
+}
