@@ -46,10 +46,11 @@ const loginLimiter = rateLimit({
 
 app.use(
   cors({
-    origin: [
+        origin: [
       "http://localhost:8080",
       "http://127.0.0.1:8080",
       "http://192.168.29.58:8080",
+      "https://energyscope-pro.vercel.app",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: [

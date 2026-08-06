@@ -20,7 +20,7 @@ export async function login(
   setDeviceId(DEVICE_ID);
 
   const data = await apiRequest<LoginResponse>(
-    "/auth/login",
+    "/api/auth/login",
     {
       method: "POST",
       body: JSON.stringify({
