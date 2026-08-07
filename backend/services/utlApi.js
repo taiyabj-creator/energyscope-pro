@@ -1,6 +1,9 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const pythonAdapter = require("../adapters/pythonAdapter");
+const sessionService = require("./sessionService");
+
 
 let token = null;
 let plantId = null;
@@ -82,18 +85,18 @@ function getToken() {
 function getPlantId() {
   return plantId;
 }
-async function getPlantStatus(utlToken) {
-  console.log("UTL token:", utlToken.substring(0, 40));
+async function getPlantStatus(jwtToken, session) {
+  console.log(
+    "UTL token:",
+    session.utlToken.substring(0, 40)
+  );
 
-  const response = await fetch(
+  const response = await utlFetch(
+    jwtToken,
+    session,
     "https://utlsolarrms.com/api/plantStatus",
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${utlToken}`,
-        "X-Device-ID": "hbeon_mobile",
-        Accept: "application/json",
-      },
     }
   );
 
@@ -106,10 +109,71 @@ async function getPlantStatus(utlToken) {
   return JSON.parse(text);
 }
 
+async function refreshSessionToken(jwtToken, session) {
+  console.log("Refreshing expired UTL token...");
+
+  const response = await pythonAdapter.login(
+    session.email,
+    session.password
+  );
+
+  if (!response.success) {
+    throw new Error("Failed to refresh UTL token.");
+  }
+
+  session.utlToken = response.token;
+
+  sessionService.updateSession(jwtToken, {
+    utlToken: response.token,
+  });
+
+  return response.token;
+}
+
+async function utlFetch(jwtToken, session, url, options = {}) {
+  let response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${session.utlToken}`,
+      "X-Device-ID": "hbeon_mobile",
+      Accept: "application/json",
+    },
+  });
+
+  // Request succeeded
+  if (response.status !== 401) {
+    return response;
+  }
+
+  console.log("UTL token expired. Refreshing...");
+
+  await refreshSessionToken(jwtToken, session);
+
+  // Retry once with the new token
+  response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${session.utlToken}`,
+      "X-Device-ID": "hbeon_mobile",
+      Accept: "application/json",
+    },
+  });
+
+  // Refresh failed or new token is still rejected
+  if (response.status === 401) {
+    throw new Error("UTL token refresh failed.");
+  }
+
+  return response;
+}
 
 module.exports = {
   login,
   getToken,
   getPlantId,
   getPlantStatus,
+  refreshSessionToken,
+  utlFetch,
 };

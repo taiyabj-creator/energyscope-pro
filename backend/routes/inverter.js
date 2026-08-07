@@ -2,32 +2,33 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  getToken,
   getPlantStatus,
-  getPlantId,
+  utlFetch,
 } = require("../services/utlApi");
 const DEVICE_SN = "ECB50A8FF18D";
 
 router.get("/", async (req, res) => {
   try {
-    const response = await fetch(
-      "https://utlsolarrms.com/api/InverterDevice",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${req.session.utlToken}`,
-          "X-Device-ID": "hbeon_mobile",
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          device_sn: DEVICE_SN,
-        }),
-      }
-    );
+    const response = await utlFetch(
+  req.token,
+  req.session,
+  "https://utlsolarrms.com/api/InverterDevice",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      device_sn: DEVICE_SN,
+    }),
+  }
+);
 
     const data = await response.json();
-    const plantStatus = await getPlantStatus(req.session.utlToken);
+    const plantStatus = await getPlantStatus(
+  req.token,
+  req.session
+);
 const plantId =
   plantStatus?.data?.total?.plantIds?.[0];
 

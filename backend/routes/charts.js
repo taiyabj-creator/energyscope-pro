@@ -2,21 +2,29 @@ const express = require("express");
 
 const router = express.Router();
 
-const { getPlantStatus } = require("../services/utlApi");
+const {
+  getPlantStatus,
+  utlFetch,
+} = require("../services/utlApi");
 
 async function callChart(req, endpoint, dateParameter = null) {
   
-  const token = req.session.utlToken;
-  console.log(
+  const session = req.session;
+
+console.log(
   "Charts token:",
-  token.substring(0, 40)
+  session.utlToken.substring(0, 40)
 );
 
-if (!token) {
+if (!session.utlToken) {
   throw new Error("Authentication token missing.");
 }
 
-const plantStatus = await getPlantStatus(token);
+const plantStatus = await getPlantStatus(
+  req.token,
+  session
+);
+
 
 const plantId =
   plantStatus?.data?.total?.plantIds?.[0];
@@ -35,15 +43,14 @@ if (!plantId) {
 
   
 
-  const response = await fetch(
+  const response = await utlFetch(
+  req.token,
+  session,
   `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
   {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Device-ID": "hbeon_mobile",
       "Content-Type": "application/json",
-      Accept: "application/json",
     },
     body: JSON.stringify(body),
   }

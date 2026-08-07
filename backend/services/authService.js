@@ -41,6 +41,7 @@ async function login(
 
 sessionService.createSession(dashboardToken, {
   email,
+  password,
   device_id: crypto.randomUUID(),
   utlToken: response.token,
   expiresAt,
