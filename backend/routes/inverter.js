@@ -50,6 +50,11 @@ if (plantStatus?.data?.online?.plantIds?.includes(plantId)) {
   data.data.logger_status = loggerStatus;
 }
 
+console.log(
+  "Final inverter response:",
+  JSON.stringify(data, null, 2)
+);
+
 res.json(data);
   } catch (err) {
     console.error(err);
