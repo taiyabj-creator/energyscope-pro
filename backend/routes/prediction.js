@@ -20,10 +20,11 @@ router.get("/today", async (req, res) => {
     const year = String(now.getFullYear());
 
     const data = await getExportData(
-      req.session.utlToken,
-      month,
-     year
-    );
+  req.token,
+  req.session,
+  month,
+  year
+);
     console.log(
       "Monthly response:",
       JSON.stringify(data.monthly, null, 2)
@@ -71,7 +72,8 @@ const performance = buildPerformanceScore({
 });
 
 const history = await getLast30DaysGeneration(
-  req.session.utlToken,
+  req.token,
+  req.session,
   now
 );
 

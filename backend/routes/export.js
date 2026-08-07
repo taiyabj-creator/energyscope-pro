@@ -20,10 +20,11 @@ router.get("/csv", async (req, res) => {
       String(now.getFullYear());
 
     const data = await getExportData(
-      req.session.utlToken,
-      month,
-      year
-    );
+  req.token,
+  req.session,
+  month,
+  year
+);
 
 const csv = generateCsv(data);
 
@@ -58,10 +59,11 @@ router.get("/excel", async (req, res) => {
       String(now.getFullYear());
 
     const data = await getExportData(
-      req.session.utlToken,
-      month,
-      year
-    );
+  req.token,
+  req.session,
+  month,
+  year
+);
 
     const excel = await generateExcel(data);
 

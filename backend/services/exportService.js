@@ -1,11 +1,17 @@
-const { getPlantStatus } = require("./utlApi");
+const {
+  getPlantStatus,
+  utlFetch,
+} = require("./utlApi");
 
 function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-async function postChart(utlToken, endpoint, dateParameter = null) {
-  const plantStatus = await getPlantStatus(utlToken);
+async function postChart(jwtToken, session, endpoint, dateParameter = null) {
+  const plantStatus = await getPlantStatus(
+  jwtToken,
+  session
+);
 console.log(
   "Plant status response:",
   JSON.stringify(plantStatus, null, 2)
@@ -26,15 +32,14 @@ const body = {
     body.date_parameter = dateParameter;
   }
 
-  const response = await fetch(
+  const response = await utlFetch(
+  jwtToken,
+  session,
   `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
   {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${utlToken}`,
-      "X-Device-ID": "hbeon_mobile",
       "Content-Type": "application/json",
-      Accept: "application/json",
     },
     body: JSON.stringify(body),
   }
@@ -49,14 +54,19 @@ console.log("Chart response:", text);
 return JSON.parse(text);
 }
 
-async function getExportData(utlToken, month, year) {
+async function getExportData(
+  jwtToken,
+  session,
+  month,
+  year
+){
   const today = new Date().toISOString().slice(0, 10);
 
   const [daily, monthly, yearly, total] = await Promise.all([
-    postChart(utlToken, "daily", today),
-    postChart(utlToken, "monthly", month),
-    postChart(utlToken, "yearly", year),
-    postChart(utlToken, "total"),
+    postChart(jwtToken, session, "daily", today),
+postChart(jwtToken, session, "monthly", month),
+postChart(jwtToken, session, "yearly", year),
+postChart(jwtToken, session, "total"),
   ]);
 
   return {
@@ -68,7 +78,8 @@ async function getExportData(utlToken, month, year) {
 }
 
 async function getLast30DaysGeneration(
-  utlToken,
+  jwtToken,
+  session,
   referenceDate = new Date()
 ) {
   const monthsNeeded = new Set();
@@ -86,10 +97,11 @@ async function getLast30DaysGeneration(
   await Promise.all(
     [...monthsNeeded].map(async (month) => {
       const response = await postChart(
-      utlToken,
-      "monthly",
-      month
-      );
+  jwtToken,
+  session,
+  "monthly",
+  month
+);
 
       monthResults.set(month, response.results ?? []);
     })
