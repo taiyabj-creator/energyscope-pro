@@ -1,4 +1,14 @@
-import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
+
+import { registerSW } from "virtual:pwa-register";
+import {
+  createStart,
+  createCsrfMiddleware,
+  createMiddleware,
+} from "@tanstack/react-start";
+
+registerSW({
+  immediate: true,
+});
 
 import { renderErrorPage } from "./lib/error-page";
 
