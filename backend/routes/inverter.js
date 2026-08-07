@@ -28,7 +28,11 @@ router.get("/", async (req, res) => {
 
     const data = await response.json();
     const plantStatus = await getPlantStatus(req.session.utlToken);
-const plantId = getPlantId();
+const plantId =
+  plantStatus?.data?.total?.plantIds?.[0];
+
+console.log("Cached plantId:", plantId);
+console.log("PlantStatus:", JSON.stringify(plantStatus, null, 2));
 
 let loggerStatus = "0";
 
