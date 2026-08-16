@@ -1,41 +1,29 @@
-const BASE_URL = "http://localhost:3000/api/charts";
+import { apiRequest } from "./client";
 
-export async function getDailyEnergy() {
-  const response = await fetch(`${BASE_URL}/daily`);
+export async function getDailyEnergy(date?: string) {
+  const endpoint = date
+    ? `/charts/daily?date=${encodeURIComponent(date)}`
+    : "/charts/daily";
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch daily chart.");
-  }
-
-  return response.json();
+  return apiRequest(endpoint);
 }
 
-export async function getMonthlyEnergy() {
-  const response = await fetch(`${BASE_URL}/monthly`);
+export async function getMonthlyEnergy(month?: string) {
+  const endpoint = month
+    ? `/charts/monthly?month=${encodeURIComponent(month)}`
+    : "/charts/monthly";
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch monthly chart.");
-  }
-
-  return response.json();
+  return apiRequest(endpoint);
 }
 
-export async function getYearlyEnergy() {
-  const response = await fetch(`${BASE_URL}/yearly`);
+export async function getYearlyEnergy(year?: number) {
+  const endpoint = year
+    ? `/charts/yearly?year=${year}`
+    : "/charts/yearly";
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch yearly chart.");
-  }
-
-  return response.json();
+  return apiRequest(endpoint);
 }
 
 export async function getTotalEnergy() {
-  const response = await fetch(`${BASE_URL}/total`);
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch total chart.");
-  }
-
-  return response.json();
+  return apiRequest("/charts/total");
 }

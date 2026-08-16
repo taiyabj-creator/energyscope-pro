@@ -8,6 +8,10 @@ export default defineConfig({
     },
   },
 
+  nitro: {
+    preset: "node-server",
+  },
+
   vite: {
     plugins: [
       VitePWA({

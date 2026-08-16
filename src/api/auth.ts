@@ -2,6 +2,7 @@ import {
   apiRequest,
   setAuthToken,
   setDeviceId,
+  setRememberMe,
 } from "./client";
 
 export interface LoginResponse {
@@ -18,21 +19,21 @@ export async function login(
   rememberMe: boolean
 ) {
   setDeviceId(DEVICE_ID);
+  setRememberMe(rememberMe);
 
   const data = await apiRequest<LoginResponse>(
-    "/api/auth/login",
+    "/auth/login",
     {
       method: "POST",
       body: JSON.stringify({
-       email,
-       password,
-       device_id: DEVICE_ID,
-       rememberMe,
-}),
+        email,
+        password,
+        rememberMe,
+      }),
     }
   );
 
-  if (!data.success) {
+  if (!data.success || !data.token) {
     throw new Error("Login failed");
   }
 

@@ -7,18 +7,6 @@ export interface InverterInfo {
   status: string;
 }
 
-export async function getInverter(
-  plantId: number
-) {
-  return apiRequest<InverterInfo>(
-    `/plants/${plantId}/inverter`
-  );
-}
-
-export async function getLogger(
-  plantId: number
-) {
-  return apiRequest(
-    `/plants/${plantId}/logger`
-  );
+export function getInverter() {
+  return apiRequest<InverterInfo>("/inverter");
 }

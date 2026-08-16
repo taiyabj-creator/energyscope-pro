@@ -77,10 +77,7 @@ const history = await getLast30DaysGeneration(
   now
 );
 
-const comparisonValue =
-  now.getHours() < sunsetHour
-    ? prediction.expectedToday
-    : currentEnergy;
+const comparisonValue = currentEnergy;
 
 const ranked = [...history, { generation: comparisonValue }]
   .sort((a, b) => b.generation - a.generation);

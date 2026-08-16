@@ -24,21 +24,29 @@ async function login(email, password) {
 
     py.on("error", reject);
 
-    py.on("close", (code) => {
+        py.on("close", (code) => {
       if (code !== 0) {
         return reject(
           new Error(
-            stderr || `Python exited with code ${code}`
+            stderr.trim() || `Python exited with code ${code}`
           )
         );
       }
 
       try {
-        resolve(JSON.parse(stdout));
-      } catch {
+        const result = JSON.parse(stdout.trim());
+
+        if (!result || typeof result !== "object") {
+          throw new Error("Invalid adapter response.");
+        }
+
+        resolve(result);
+      } catch (err) {
         reject(
           new Error(
-            "Python adapter returned invalid JSON."
+            `Python adapter returned invalid JSON: ${
+              err.message
+            }`
           )
         );
       }

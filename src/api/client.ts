@@ -1,7 +1,4 @@
-
-
-const BASE_URL = import.meta.env["VITE_API_BASE_URL"];
-console.log("BASE_URL =", BASE_URL);
+const BASE_URL = "/api";
 
 let authToken: string | null = null;
 
@@ -11,13 +8,13 @@ if (typeof window !== "undefined") {
     sessionStorage.getItem("energyscope-token");
 }
 
-let deviceId: string | null = null;
-
+let deviceId = "hbeon_mobile";
 let rememberMe = true;
-
 
 export function setAuthToken(token: string) {
   authToken = token;
+
+  if (typeof window === "undefined") return;
 
   if (rememberMe) {
     localStorage.setItem("energyscope-token", token);
@@ -28,7 +25,7 @@ export function setAuthToken(token: string) {
   }
 }
 
-  export function clearAuthToken() {
+export function clearAuthToken() {
   authToken = null;
 
   if (typeof window === "undefined") return;
@@ -40,31 +37,45 @@ export function setAuthToken(token: string) {
 export function setDeviceId(id: string) {
   deviceId = id;
 }
+
 export function setRememberMe(enabled: boolean) {
   rememberMe = enabled;
 }
 
-export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
+export async function apiRequest<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const normalizedEndpoint = endpoint.startsWith("/api/")
+    ? endpoint.slice(4)
+    : endpoint.startsWith("/")
+      ? endpoint
+      : `/${endpoint}`;
+
+  const response = await fetch(`${BASE_URL}${normalizedEndpoint}`, {
     ...options,
 
     headers: {
       "Content-Type": "application/json",
 
-      ...(authToken && {
-        Authorization: `Bearer ${authToken}`,
-      }),
+      ...(authToken
+        ? {
+            Authorization: `Bearer ${authToken}`,
+          }
+        : {}),
 
-      ...(deviceId && {
-        "x-device-id": deviceId,
-      }),
+      "x-device-id": deviceId,
 
       ...(options.headers || {}),
     },
   });
 
   if (!response.ok) {
-    throw new Error(`API Error ${response.status}: ${response.statusText}`);
+    const text = await response.text();
+
+    throw new Error(
+      `API Error ${response.status}: ${text || response.statusText}`
+    );
   }
 
   return response.json();

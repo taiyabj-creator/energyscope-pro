@@ -29,8 +29,27 @@ def login(email, password):
         timeout=30,
     )
 
-    return response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        return {
+            "success": False,
+            "error": (
+                f"UTL login returned HTTP {response.status_code} "
+                "with a non-JSON response."
+            ),
+        }
 
+    if response.status_code != 200:
+        return {
+            "success": False,
+            "error": data.get(
+                "error",
+                f"UTL login failed with HTTP {response.status_code}."
+            ),
+        }
+
+    return data
 
 if __name__ == "__main__":
     try:
