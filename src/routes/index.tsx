@@ -52,43 +52,35 @@ function DashboardPage() {
   const solar = formatPower(live?.solarPower ?? 0);
   const capacityPercentage = getCapacityPercentage(live?.solarPower ?? 0, plant?.capacityKw);
   const freshness = formatMeasurementFreshness(live?.timestamp);
-  if (
-  isLoading &&
-  !live &&
-  !totals &&
-  !plant &&
-  !inverter
-) {
-  return <DashboardSkeleton />;
-}
+  if (isLoading && !live && !totals && !plant && !inverter) {
+    return <DashboardSkeleton />;
+  }
 
   return (
-  <motion.div
-    className="space-y-6"
-    initial={{ opacity: 0, y: 12 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{
-      duration: 0.45,
-      ease: "easeOut",
-    }}
-    
-  >
+    <motion.div
+      className="space-y-6"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.45,
+        ease: "easeOut",
+      }}
+    >
+      {count > 0 && (
+        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
+          <h3 className="text-sm font-semibold text-red-400">
+            {count} Active Alert{count > 1 ? "s" : ""}
+          </h3>
 
-  {count > 0 && (
-    <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
-      <h3 className="text-sm font-semibold text-red-400">
-        {count} Active Alert{count > 1 ? "s" : ""}
-      </h3>
-
-      <ul className="mt-2 space-y-1 text-sm">
-        {alerts.map((alert) => (
-          <li key={alert.id}>
-            <strong>{alert.title}</strong> — {alert.description}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )}
+          <ul className="mt-2 space-y-1 text-sm">
+            {alerts.map((alert) => (
+              <li key={alert.id}>
+                <strong>{alert.title}</strong> — {alert.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Current solar power"
@@ -107,36 +99,38 @@ function DashboardPage() {
           icon={Sunrise}
           tone="solar"
           trend={totals ? trendPct(totals.today, totals.todayPrevious) : null}
-          footnote="vs yesterday"
+          footnote={
+            totals && totals.todayPrevious === null
+              ? "No comparison data for yesterday"
+              : "vs yesterday"
+          }
           delay={0.1}
         />
-                <MetricCard
+        <MetricCard
           title="Expected Today"
           value={prediction?.expectedToday?.toFixed(2) ?? "--"}
           unit="kWh"
           icon={TrendingUp}
-          tone="primary"
+          tone="solar"
           footnote={
-          prediction
-          ? `${prediction.difference >= 0 ? "+" : ""}${prediction.difference.toFixed(2)} kWh ${prediction.differenceLabel} • ${prediction.forecastPercent}% of forecast`
-        : "Calculating..."
-}
+            prediction
+              ? `${prediction.difference >= 0 ? "+" : ""}${prediction.difference.toFixed(2)} kWh ${prediction.differenceLabel} • ${prediction.forecastPercent}% of forecast`
+              : "Calculating..."
+          }
           delay={0.15}
         />
 
         <MetricCard
-  title="Solar Performance"
-  value={prediction?.performance.score ?? "--"}
-  unit="%"
-  icon={Gauge}
-  tone="solar"
-  footnote={
-    prediction
-      ? `${prediction.performance.status} • Weather-adjusted`
-      : "Calculating..."
-  }
-  delay={0.2}
-/>
+          title="Solar Performance"
+          value={prediction?.performance.score ?? "--"}
+          unit="%"
+          icon={Gauge}
+          tone="solar"
+          footnote={
+            prediction ? `${prediction.performance.status} • Weather-adjusted` : "Calculating..."
+          }
+          delay={0.2}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
@@ -166,7 +160,11 @@ function DashboardPage() {
           unit={formatEnergy(totals?.month ?? 0).unit}
           icon={CalendarRange}
           trend={totals ? trendPct(totals.month, totals.monthPrevious) : null}
-          footnote="vs last month"
+          footnote={
+            totals && totals.monthPrevious === null
+              ? "No comparison data for last month"
+              : "vs last month"
+          }
           delay={0.3}
         />
         <MetricCard
@@ -175,7 +173,11 @@ function DashboardPage() {
           unit={formatEnergy(totals?.year ?? 0).unit}
           icon={TrendingUp}
           trend={totals ? trendPct(totals.year, totals.yearPrevious) : null}
-          footnote="vs last year"
+          footnote={
+            totals && totals.yearPrevious === null
+              ? "No comparison data for last year"
+              : "vs last year"
+          }
           delay={0.35}
         />
         <MetricCard
@@ -187,13 +189,13 @@ function DashboardPage() {
           delay={0.4}
         />
         <MetricCard
-  title="Today's Rank"
-  value={prediction?.rank?.label ?? "--"}
-  icon={TrendingUp}
-  tone="primary"
-  footnote={prediction?.rank?.subtitle ?? "Calculating..."}
-  delay={0.45}
-/>
+          title="Today's Rank"
+          value={prediction?.rank?.label ?? "--"}
+          icon={TrendingUp}
+          tone="neutral"
+          footnote={prediction?.rank?.subtitle ?? "Calculating..."}
+          delay={0.45}
+        />
       </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-3">

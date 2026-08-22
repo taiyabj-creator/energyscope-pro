@@ -75,7 +75,7 @@ function DiagnosticsPage() {
             />
             <Row label="Last failed request" value={formatTimestamp(live.errorUpdatedAt)} />
             <Row label="API response latency" value="Not provided" />
-            <Row label="Backend version" value="V1.0.0" />
+            <Row label="Backend version" value="V1.1.0" />
             <Row
               label="Latest request state"
               value={live.fetchStatus === "fetching" ? "Refreshing" : "Idle"}
@@ -90,10 +90,7 @@ function DiagnosticsPage() {
         <Panel delay={0.05}>
           <PanelHeading title="Environment" subtitle="Useful context when reporting an issue" />
           <dl className="space-y-3">
-            <Row
-              label="Frontend version"
-              value={import.meta.env["VITE_APP_VERSION"] ?? "V1.0.0"}
-            />
+            <Row label="Frontend version" value={import.meta.env["VITE_APP_VERSION"] ?? "V1.1.0"} />
             <Row label="Timezone" value={timezone} />
             <Row label="Browser" value={browser} />
             <Row
@@ -101,15 +98,9 @@ function DiagnosticsPage() {
               value={formatMeasurementFreshness(logger?.lastCommunication)}
             />
             <Row
-            label="Logger status"
-             value={
-            logger
-            ? logger.status === "online"
-             ? "Online"
-           : "Offline"
-            : "Unavailable"
-             }
-              />
+              label="Logger status"
+              value={logger ? (logger.status === "online" ? "Online" : "Offline") : "Unavailable"}
+            />
           </dl>
         </Panel>
       </div>

@@ -112,7 +112,7 @@ function AnalyticsPage() {
       </Panel>
 
       <div className="grid items-start gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <Panel delay={0.15}>
+        <Panel delay={0.15} className="min-w-0">
           <PanelHeading
             title="Generation heatmap"
             subtitle="Daily production returned by each monthly UTL chart; missing dates are blank"

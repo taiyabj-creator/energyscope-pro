@@ -1,11 +1,10 @@
-const BASE_URL = "/api";
+const BASE_URL = import.meta.env["VITE_API_BASE_URL"] ?? "/api";
 
 let authToken: string | null = null;
 
 if (typeof window !== "undefined") {
   authToken =
-    localStorage.getItem("energyscope-token") ??
-    sessionStorage.getItem("energyscope-token");
+    localStorage.getItem("energyscope-token") ?? sessionStorage.getItem("energyscope-token");
 }
 
 let deviceId = "hbeon_mobile";
@@ -42,10 +41,7 @@ export function setRememberMe(enabled: boolean) {
   rememberMe = enabled;
 }
 
-export async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const normalizedEndpoint = endpoint.startsWith("/api/")
     ? endpoint.slice(4)
     : endpoint.startsWith("/")
@@ -73,9 +69,7 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const text = await response.text();
 
-    throw new Error(
-      `API Error ${response.status}: ${text || response.statusText}`
-    );
+    throw new Error(`API Error ${response.status}: ${text || response.statusText}`);
   }
 
   return response.json();

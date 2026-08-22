@@ -14,10 +14,13 @@ export interface EnergyTotals {
   month: number;
   year: number;
   total: number;
-  /** kWh, same period previous cycle — used for trend indicators */
-  todayPrevious: number;
-  monthPrevious: number;
-  yearPrevious: number;
+  /**
+   * kWh for the same period one cycle earlier — used for trend indicators.
+   * null means no historical data exists for that period.
+   */
+  todayPrevious: number | null;
+  monthPrevious: number | null;
+  yearPrevious: number | null;
 }
 
 export interface BatteryState {
@@ -176,7 +179,7 @@ export interface MaintenanceState {
 
   cleaningDueIn: number;
   inspectionDueIn: number;
-  
+
   healthFactors: { label: string; score: number; weightPct: number }[];
   timeline: MaintenanceEvent[];
 }

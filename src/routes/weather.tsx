@@ -41,7 +41,7 @@ export const Route = createFileRoute("/weather")({
   component: WeatherPage,
 });
 
-  function WeatherPage() {
+function WeatherPage() {
   const { data: plant } = usePlantInfo();
   const weather = useWeather(plant?.latitude, plant?.longitude);
   const current = weather.data?.current;
@@ -57,12 +57,15 @@ export const Route = createFileRoute("/weather")({
 
   const productionForecast = useMemo(() => {
     if (!current || daily.length === 0) return null;
-    return calculateProductionForecast(current, daily[0]);
+    const today = daily[0];
+    if (!today) return null;
+    return calculateProductionForecast(current, today);
   }, [current, daily]);
 
   const daylightSummary = useMemo(() => {
     if (daily.length === 0) return null;
     const today = daily[0];
+    if (!today) return null;
     return {
       sunrise: today.sunrise,
       sunset: today.sunset,
@@ -262,7 +265,7 @@ export const Route = createFileRoute("/weather")({
           <PanelHeading
             title="Day Period Forecast"
             subtitle="Morning, afternoon, evening and night outlook"
-/>
+          />
           {weather.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : timeline.length === 0 ? (
@@ -299,7 +302,9 @@ export const Route = createFileRoute("/weather")({
                   <div
                     className={cn(
                       "rounded-full p-2",
-                      solarImpact.impactType === "negative" ? "bg-rose-500/10 text-rose-400" : "bg-emerald-500/10 text-emerald-400"
+                      solarImpact.impactType === "negative"
+                        ? "bg-rose-500/10 text-rose-400"
+                        : "bg-emerald-500/10 text-emerald-400",
                     )}
                   >
                     <Info className="size-5" />
@@ -308,14 +313,16 @@ export const Route = createFileRoute("/weather")({
                 </div>
                 <p className="mt-3 text-sm text-slate-400">{solarImpact.description}</p>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-xs text-slate-500 uppercase font-medium">Efficiency Loss</p>
-                  <p className={cn(
-                    "text-xl font-bold",
-                    solarImpact.efficiencyLoss > 0 ? "text-rose-400" : "text-emerald-400"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-xl font-bold",
+                      solarImpact.efficiencyLoss > 0 ? "text-rose-400" : "text-emerald-400",
+                    )}
+                  >
                     {solarImpact.efficiencyLoss > 0 ? `-${solarImpact.efficiencyLoss}%` : "Minimal"}
                   </p>
                 </div>
@@ -330,11 +337,8 @@ export const Route = createFileRoute("/weather")({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] items-start">
-        <Panel className="self-start h-auto">
-          <PanelHeading
-           title="Hourly Forecast"
-           subtitle="Hour-by-hour weather conditions"
-/>
+        <Panel className="self-start h-auto min-w-0">
+          <PanelHeading title="Hourly Forecast" subtitle="Hour-by-hour weather conditions" />
           {weather.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : weather.isError ? (
@@ -357,15 +361,15 @@ export const Route = createFileRoute("/weather")({
                   </p>
                   <div className="mt-1 flex items-center justify-center gap-1">
                     <Droplets className="size-3 text-blue-400" />
-                    <p className="text-[10px] font-medium text-slate-400">{hour.rainProbabilityPct}%</p>
+                    <p className="text-[10px] font-medium text-slate-400">
+                      {hour.rainProbabilityPct}%
+                    </p>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </Panel>
-
-        
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -381,7 +385,11 @@ export const Route = createFileRoute("/weather")({
                 <DaylightMetric label="Sunrise" value={daylightSummary.sunrise} icon={Sunrise} />
                 <DaylightMetric label="Sunset" value={daylightSummary.sunset} icon={Sunset} />
                 <DaylightMetric label="Daylight" value={daylightSummary.duration} icon={Timer} />
-                <DaylightMetric label="Solar Noon" value={daylightSummary.solarNoon} icon={SunMedium} />
+                <DaylightMetric
+                  label="Solar Noon"
+                  value={daylightSummary.solarNoon}
+                  icon={SunMedium}
+                />
               </div>
             </div>
           )}
@@ -395,11 +403,27 @@ export const Route = createFileRoute("/weather")({
             <EmptyState />
           ) : (
             <div className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                <DaylightMetric label="Today's Rain" value={`${current.precipitationMm} mm`} icon={Droplets} />
-                <DaylightMetric label="Probability" value={`${current.rainProbabilityPct}%`} icon={CloudRain} />
-                <DaylightMetric label="Humidity" value={`${current.humidityPct}%`} icon={Droplets} />
-                <DaylightMetric label="Status" value={current.precipitationMm > 0 ? "Raining" : "Dry"} icon={Cloud} />
+              <div className="grid grid-cols-2 gap-4">
+                <DaylightMetric
+                  label="Today's Rain"
+                  value={`${current.precipitationMm} mm`}
+                  icon={Droplets}
+                />
+                <DaylightMetric
+                  label="Probability"
+                  value={`${current.rainProbabilityPct}%`}
+                  icon={CloudRain}
+                />
+                <DaylightMetric
+                  label="Humidity"
+                  value={`${current.humidityPct}%`}
+                  icon={Droplets}
+                />
+                <DaylightMetric
+                  label="Status"
+                  value={current.precipitationMm > 0 ? "Raining" : "Dry"}
+                  icon={Cloud}
+                />
               </div>
             </div>
           )}
@@ -413,11 +437,23 @@ export const Route = createFileRoute("/weather")({
             <EmptyState />
           ) : (
             <div className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                <DaylightMetric label="Speed" value={`${current.windKph.toFixed(0)} km/h`} icon={Wind} />
+              <div className="grid grid-cols-2 gap-4">
+                <DaylightMetric
+                  label="Speed"
+                  value={`${current.windKph.toFixed(0)} km/h`}
+                  icon={Wind}
+                />
                 <DaylightMetric label="Direction" value={current.windDirection} icon={Navigation} />
-                <DaylightMetric label="Gusts" value={`${current.windGustsKph.toFixed(0)} km/h`} icon={Zap} />
-                <DaylightMetric label="Pressure" value={`${current.pressureHpa.toFixed(0)} hPa`} icon={Gauge} />
+                <DaylightMetric
+                  label="Gusts"
+                  value={`${current.windGustsKph.toFixed(0)} km/h`}
+                  icon={Zap}
+                />
+                <DaylightMetric
+                  label="Pressure"
+                  value={`${current.pressureHpa.toFixed(0)} hPa`}
+                  icon={Gauge}
+                />
               </div>
             </div>
           )}
@@ -540,10 +576,26 @@ function calculateProductionForecast(current: WeatherNow, today: WeatherDay) {
 
 function getAlerts(current: WeatherNow) {
   const alerts = [];
-  if (current.windKph > 50) alerts.push({ title: "High Wind", description: "Sustained high winds may affect light mounting structures." });
-  if (current.temperatureC > 40) alerts.push({ title: "Extreme Heat", description: "High ambient temperatures may reduce inverter efficiency." });
-  if (current.weatherCode >= 95) alerts.push({ title: "Thunderstorm", description: "Likely thunderstorms. Risk of electrical surge." });
-  if (current.precipitationMm > 20) alerts.push({ title: "Heavy Rain", description: "Potential for heavy precipitation affecting visibility and panel cleaning." });
+  if (current.windKph > 50)
+    alerts.push({
+      title: "High Wind",
+      description: "Sustained high winds may affect light mounting structures.",
+    });
+  if (current.temperatureC > 40)
+    alerts.push({
+      title: "Extreme Heat",
+      description: "High ambient temperatures may reduce inverter efficiency.",
+    });
+  if (current.weatherCode >= 95)
+    alerts.push({
+      title: "Thunderstorm",
+      description: "Likely thunderstorms. Risk of electrical surge.",
+    });
+  if (current.precipitationMm > 20)
+    alerts.push({
+      title: "Heavy Rain",
+      description: "Potential for heavy precipitation affecting visibility and panel cleaning.",
+    });
   return alerts;
 }
 
@@ -562,7 +614,7 @@ function weatherDescription(code: number | undefined) {
 
 function getTimeline(hourly: any[]) {
   const findClosest = (hour: number) => {
-    return hourly.find(h => new Date(h.time).getHours() === hour) || hourly[0];
+    return hourly.find((h) => new Date(h.time).getHours() === hour) || hourly[0];
   };
 
   const morning = findClosest(9);
@@ -574,14 +626,14 @@ function getTimeline(hourly: any[]) {
     period,
     weatherCode: item.weatherCode,
     temp: Math.round(item.temperatureC),
-    condition: weatherDescription(item.weatherCode)
+    condition: weatherDescription(item.weatherCode),
   });
 
   return [
     map(morning, "Morning"),
     map(afternoon, "Afternoon"),
     map(evening, "Evening"),
-    map(night, "Night")
+    map(night, "Night"),
   ];
 }
 
@@ -589,7 +641,7 @@ function calculateSolarNoon(sunrise: string, sunset: string) {
   if (sunrise === "—" || sunset === "—") return "—";
   try {
     const parse = (t: string) => {
-      const [h, m] = t.split(":").map(Number);
+      const [h = 0, m = 0] = t.split(":").map(Number);
       return h * 60 + m;
     };
     const s1 = parse(sunrise);

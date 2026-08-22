@@ -66,9 +66,7 @@ async function fetchChart(endpoint: string): Promise<ChartResponse> {
   return apiRequest<ChartResponse>(endpoint);
 }
 
-function getLoggerStatus(
-  inverter: UtlInverter
-): "online" | "offline" | "warning" {
+function getLoggerStatus(inverter: UtlInverter): "online" | "offline" | "warning" {
   switch (String(inverter.logger_status)) {
     case "1":
       return "online";
@@ -134,53 +132,68 @@ export async function fetchLivePower(): Promise<LivePowerSnapshot> {
   return {
     timestamp: inv.timestamp,
 
-    solarPower: loggerOffline
-      ? 0
-      : Number(inv.total_ac_power) * 1000,
+    solarPower: loggerOffline ? 0 : Number(inv.total_ac_power) * 1000,
 
-    plantStatus:
-      loggerOffline
-        ? "standby"
-        : inv.inverter_status === 1
-          ? "producing"
-          : "standby",
+    plantStatus: loggerOffline ? "standby" : inv.inverter_status === 1 ? "producing" : "standby",
   };
 }
 
 export async function fetchEnergyTotals(): Promise<EnergyTotals> {
-  const currentYear = new Date().getFullYear();
-  const [inverter, month, year] = await Promise.all([
-  fetchUtlInverter(),
-  fetchChart("/api/charts/monthly"),
-  fetchChart(`/api/charts/yearly?year=${currentYear}`),
-]);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const currentYear = now.getFullYear();
+
+  const [inverter, monthChart, prevMonthChart, yearChart, prevYearChart] = await Promise.all([
+    fetchUtlInverter(),
+    fetchChart(`/api/charts/monthly?month=${monthKey(now)}`),
+    fetchChart(`/api/charts/monthly?month=${monthKey(prevMonthDate)}`),
+    fetchChart(`/api/charts/yearly?year=${currentYear}`),
+    fetchChart(`/api/charts/yearly?year=${currentYear - 1}`),
+  ]);
+
+  // Yesterday's recorded generation is the daily row of the monthly chart; when
+  // today is the 1st, that row lives in the previous month's chart instead.
+  const monthlyRows = monthChart.results ?? [];
+  let yesterdayRow = monthlyRows.find((row) => Number(row.date) === yesterday.getDate());
+  if (!yesterdayRow && now.getDate() === 1) {
+    yesterdayRow = (prevMonthChart.results ?? []).find(
+      (row) => Number(row.date) === yesterday.getDate(),
+    );
+  }
+
+  const prevMonthRows = prevMonthChart.results ?? [];
+  const prevYearRows = prevYearChart.results ?? [];
 
   return {
     today: Number(inverter.daily_production),
 
-    month: sumPvProductionKwh(month.results, "monthly"),
+    month: sumPvProductionKwh(monthlyRows, "monthly"),
 
     // The yearly endpoint returns one kWh value per month; sum it directly.
-    year: sumPvProductionKwh(year.results, "yearly"),
+    year: sumPvProductionKwh(yearChart.results ?? [], "yearly"),
 
     // InverterDevice's cumulative counter is the only lifetime value exposed by UTL.
     // /charts/total is a historical chart series, not a plant lifetime total.
     total: Number(inverter.daily_energy_produced),
 
-    todayPrevious: 0,
-    monthPrevious: 0,
-    yearPrevious: 0,
+    // Historical comparisons use real UTL chart rows. null means the period has
+    // no recorded data and must not be presented as an actual 0% change.
+    todayPrevious: yesterdayRow ? chartValue(yesterdayRow, "monthly") : null,
+    monthPrevious: prevMonthRows.length ? sumPvProductionKwh(prevMonthRows, "monthly") : null,
+    yearPrevious: prevYearRows.length ? sumPvProductionKwh(prevYearRows, "yearly") : null,
   };
 }
 
 export async function fetchPlantInfo(): Promise<PlantInfo> {
   const config = await apiRequest<{
-  name: string;
-  capacity: number;
-  location: string;
-  latitude: number;
-  longitude: number;
-}>("/api/plant-config");
+    name: string;
+    capacity: number;
+    location: string;
+    latitude: number;
+    longitude: number;
+  }>("/api/plant-config");
 
   return {
     name: config.name,
@@ -216,8 +229,6 @@ export async function fetchInverter(): Promise<InverterInfo> {
     dcCurrent: loggerOffline ? 0 : Number(inv.dc_current_1),
 
     temperatureC: Number(inv.temperature_1),
-
-   
   };
 }
 
@@ -228,7 +239,7 @@ export async function fetchLogger(): Promise<LoggerInfo> {
     model: "UTL WiFi Logger",
     serial: inv.module_mac_address,
     firmware: inv.comm_software_version_1 ?? "Unknown",
-  
+
     status: getLoggerStatus(inv),
 
     wifiSsid: inv.router_ssid,
@@ -251,9 +262,7 @@ export async function fetchEnergySeries(
   const year = String(selectedDate.getFullYear());
 
   if (range === "day") {
-    const data = await fetchChart(`/api/charts/daily?date=${day}`)
-
-    
+    const data = await fetchChart(`/api/charts/daily?date=${day}`);
 
     return (data.results ?? []).map((p) => {
       const timeMinutes = p.timeMinutes ?? 0;
@@ -268,22 +277,17 @@ export async function fetchEnergySeries(
     });
   }
 
-    if (range === "month") {
-    const data = await fetchChart(
-      `/api/charts/monthly?month=${month}`
-    );
+  if (range === "month") {
+    const data = await fetchChart(`/api/charts/monthly?month=${month}`);
 
     const daysInMonth = new Date(
       selectedDate.getFullYear(),
       selectedDate.getMonth() + 1,
-      0
+      0,
     ).getDate();
 
     const values = new Map(
-      (data.results ?? []).map((p) => [
-        Number(p.date),
-        chartValue(p, "monthly"),
-      ])
+      (data.results ?? []).map((p) => [Number(p.date), chartValue(p, "monthly")]),
     );
 
     return Array.from({ length: daysInMonth }, (_, i) => ({
@@ -293,7 +297,7 @@ export async function fetchEnergySeries(
     }));
   }
   if (range === "year") {
-    const data = await fetchChart(`/api/charts/yearly?year=${year}`)
+    const data = await fetchChart(`/api/charts/yearly?year=${year}`);
 
     return (data.results ?? []).map((p) => ({
       label: monthLabel(p.month),
@@ -302,7 +306,7 @@ export async function fetchEnergySeries(
     }));
   }
 
-  const data = await fetchChart("/api/charts/total")
+  const data = await fetchChart("/api/charts/total");
 
   return (data.results ?? []).map((p) => ({
     label: String(p.year),
@@ -312,9 +316,7 @@ export async function fetchEnergySeries(
 }
 
 export async function fetchDailyHistory(selectedDate: Date): Promise<DailyHistoryRow[]> {
-  const data = await fetchChart(
-   `/api/charts/monthly?month=${monthKey(selectedDate)}`
-  );
+  const data = await fetchChart(`/api/charts/monthly?month=${monthKey(selectedDate)}`);
   return (data.results ?? [])
     .map((point) => ({
       date: chartDate(point.date, selectedDate.getFullYear(), selectedDate.getMonth()),
@@ -324,7 +326,7 @@ export async function fetchDailyHistory(selectedDate: Date): Promise<DailyHistor
 }
 
 export async function fetchMonthlyHistory(year: number): Promise<MonthlyHistoryRow[]> {
-  const data = await fetchChart(`/api/charts/yearly?year=${year}`)
+  const data = await fetchChart(`/api/charts/yearly?year=${year}`);
   return (data.results ?? []).map((point) => ({
     month: monthLabel(point.month),
     generation: chartValue(point, "yearly"),
@@ -332,7 +334,7 @@ export async function fetchMonthlyHistory(year: number): Promise<MonthlyHistoryR
 }
 
 export async function fetchYearlyHistory(): Promise<YearlyHistoryRow[]> {
-  const data = await fetchChart("/api/charts/total")
+  const data = await fetchChart("/api/charts/total");
   return (data.results ?? []).map((point) => ({
     year: String(point.year),
     generation: chartValue(point, "total"),
@@ -341,12 +343,10 @@ export async function fetchYearlyHistory(): Promise<YearlyHistoryRow[]> {
 
 export async function fetchAnalyticsData(year = new Date().getFullYear()): Promise<AnalyticsData> {
   const [plant, yearly, ...monthlyResponses] = await Promise.all([
-  fetchPlantInfo(),
-  fetchChart(`/api/charts/yearly?year=${year}`),
-  ...Array.from({ length: 12 }, (_, month) =>
-      fetchChart(
-        `/api/charts/monthly?month=${year}-${String(month + 1).padStart(2, "0")}`,
-      ),
+    fetchPlantInfo(),
+    fetchChart(`/api/charts/yearly?year=${year}`),
+    ...Array.from({ length: 12 }, (_, month) =>
+      fetchChart(`/api/charts/monthly?month=${year}-${String(month + 1).padStart(2, "0")}`),
     ),
   ]);
 
@@ -491,43 +491,42 @@ export async function fetchWeather(latitude: number, longitude: number): Promise
 
 interface OpenMeteoResponse {
   current?: {
-  time?: string;
-  temperature_2m?: number;
-  apparent_temperature?: number;
-  relative_humidity_2m?: number;
-  surface_pressure?: number;
-  cloud_cover?: number;
-  wind_speed_10m?: number;
-  wind_gusts_10m?: number;
-  wind_direction_10m?: number;
-  weather_code?: number;
-  precipitation_probability?: number;
-  precipitation?: number;
-  uv_index?: number;
+    time?: string;
+    temperature_2m?: number;
+    apparent_temperature?: number;
+    relative_humidity_2m?: number;
+    surface_pressure?: number;
+    cloud_cover?: number;
+    wind_speed_10m?: number;
+    wind_gusts_10m?: number;
+    wind_direction_10m?: number;
+    weather_code?: number;
+    precipitation_probability?: number;
+    precipitation?: number;
+    uv_index?: number;
   };
   hourly?: {
-  time?: string[];
-  temperature_2m?: number[];
-  weather_code?: number[];
-  precipitation_probability?: number[];
-  cloud_cover?: number[];
+    time?: string[];
+    temperature_2m?: number[];
+    weather_code?: number[];
+    precipitation_probability?: number[];
+    cloud_cover?: number[];
   };
   daily?: {
-  time?: string[];
-  weather_code?: number[];
-  temperature_2m_max?: number[];
-  temperature_2m_min?: number[];
-  precipitation_probability_max?: number[];
-  precipitation_sum?: number[];
-  wind_speed_10m_max?: number[];
-  uv_index_max?: number[];
-  cloud_cover_mean?: number[];
-  sunrise?: string[];
-  sunset?: string[];
-  daylight_duration?: number[];
+    time?: string[];
+    weather_code?: number[];
+    temperature_2m_max?: number[];
+    temperature_2m_min?: number[];
+    precipitation_probability_max?: number[];
+    precipitation_sum?: number[];
+    wind_speed_10m_max?: number[];
+    uv_index_max?: number[];
+    cloud_cover_mean?: number[];
+    sunrise?: string[];
+    sunset?: string[];
+    daylight_duration?: number[];
   };
 }
-
 
 function numberAt(values: number[] | undefined, index: number) {
   return values?.[index] ?? 0;
@@ -561,7 +560,6 @@ export async function fetchMaintenance(): Promise<MaintenanceState> {
 
   const maintenance = await apiRequest<any>("/api/maintenance");
 
-  
   return {
     installationDate: plant.installationDate,
 
@@ -626,10 +624,19 @@ export async function fetchNotifications(): Promise<NotificationItem[]> {
       detail: "Data gap of 11 minutes was backfilled.",
       time: "4d ago",
       unread: false,
-      
     },
   ];
 }
+export async function updateMaintenance(updates: {
+  lastCleaning?: string;
+  lastInspection?: string;
+}): Promise<void> {
+  await apiRequest("/api/maintenance", {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+}
+
 type PredictionResponse = {
   success: boolean;
 
@@ -639,7 +646,7 @@ type PredictionResponse = {
   difference: number;
   differenceLabel: string;
   forecastPercent: number;
-  
+
   completion: number;
   monthAverage: number;
   progress: number;

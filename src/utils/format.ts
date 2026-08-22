@@ -8,8 +8,15 @@ export function formatEnergy(kwh: number) {
   return { value: kwh.toFixed(kwh < 100 ? 2 : 1), unit: "kWh" };
 }
 
-export function trendPct(current: number, previous: number) {
-  if (!previous) return 0;
+/**
+ * Percentage change versus the previous period. Returns null when the
+ * comparison cannot be expressed honestly: no historical value, or a previous
+ * value of zero while current production exists (percentage undefined).
+ * A genuine zero-to-zero comparison returns 0, where "flat" is correct.
+ */
+export function trendPct(current: number, previous: number | null): number | null {
+  if (previous === null || previous < 0) return null;
+  if (previous === 0) return current === 0 ? 0 : null;
   return ((current - previous) / previous) * 100;
 }
 
