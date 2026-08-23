@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/services/solarService";
+import * as archiveApi from "@/services/archiveHistoryService";
 import type { EnergyRange } from "@/types/solar";
 
 const LIVE_REFRESH_INTERVAL_MS = 60_000;
@@ -40,7 +41,6 @@ export const useEnergySeries = (range: EnergyRange, selectedDate: Date) =>
     queryKey: ["energy-series", range, selectedDate.toISOString().slice(0, 10)],
     queryFn: () => api.fetchEnergySeries(range, selectedDate),
   });
-  
 
 export const useAnalyticsData = (year: number) =>
   useQuery({ queryKey: ["analytics", year], queryFn: () => api.fetchAnalyticsData(year) });
@@ -56,6 +56,37 @@ export const useMonthlyHistory = (year: number) =>
 
 export const useYearlyHistory = () =>
   useQuery({ queryKey: ["history-yearly"], queryFn: api.fetchYearlyHistory });
+
+// EnergyScope Archive source - enabled only while the History page shows it,
+// so archive requests never fire in UTL Live mode.
+export const useArchiveDailyHistory = (selectedDate: Date, enabled: boolean) =>
+  useQuery({
+    queryKey: ["archive-history-daily", selectedDate.getFullYear(), selectedDate.getMonth()],
+    queryFn: () =>
+      archiveApi.fetchArchiveMonthDays(selectedDate.getFullYear(), selectedDate.getMonth()),
+    enabled,
+  });
+
+export const useArchiveMonthlyHistory = (year: number, enabled: boolean) =>
+  useQuery({
+    queryKey: ["archive-history-monthly", year],
+    queryFn: () => archiveApi.fetchArchiveYearMonths(year),
+    enabled,
+  });
+
+export const useArchiveYearlyHistory = (enabled: boolean) =>
+  useQuery({
+    queryKey: ["archive-history-yearly"],
+    queryFn: archiveApi.fetchArchiveYears,
+    enabled,
+  });
+
+export const useArchiveTotalHistory = (enabled: boolean) =>
+  useQuery({
+    queryKey: ["archive-history-total"],
+    queryFn: archiveApi.fetchArchiveTotal,
+    enabled,
+  });
 
 export const useWeather = (latitude: number | undefined, longitude: number | undefined) =>
   useQuery({

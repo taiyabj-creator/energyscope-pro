@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, Printer, Search } from "lucide-react";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
-import { useDailyHistory, useMonthlyHistory, useYearlyHistory } from "@/hooks/useSolarData";
+import {
+  useDailyHistory,
+  useMonthlyHistory,
+  useYearlyHistory,
+  useArchiveDailyHistory,
+  useArchiveMonthlyHistory,
+  useArchiveYearlyHistory,
+  useArchiveTotalHistory,
+} from "@/hooks/useSolarData";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatDate } from "@/utils/format";
 import {
@@ -31,16 +39,39 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "total", label: "Total" },
 ];
 
+type HistorySource = "utl" | "archive";
+
+const SOURCES: { key: HistorySource; label: string }[] = [
+  { key: "utl", label: "UTL Live" },
+  { key: "archive", label: "EnergyScope Archive" },
+];
+
+const SOURCE_SUBTITLES: Record<HistorySource, string> = {
+  utl: "Recorded UTL production only",
+  archive: "Recorded by EnergyScope",
+};
+
 function HistoryPage() {
+  const [source, setSource] = useState<HistorySource>("utl");
   const [tab, setTab] = useState<Tab>("daily");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const daily = useDailyHistory(selectedDate);
-const monthly = useMonthlyHistory(selectedDate.getFullYear());
-const yearly = useYearlyHistory();
 
-const total = yearly;
+  const isArchive = source === "archive";
+  const utlDaily = useDailyHistory(selectedDate);
+  const utlMonthly = useMonthlyHistory(selectedDate.getFullYear());
+  const utlYearly = useYearlyHistory();
+  const archiveDaily = useArchiveDailyHistory(selectedDate, isArchive);
+  const archiveMonthly = useArchiveMonthlyHistory(selectedDate.getFullYear(), isArchive);
+  const archiveYearly = useArchiveYearlyHistory(isArchive);
+  const archiveTotal = useArchiveTotalHistory(isArchive);
+
+  const daily = isArchive ? archiveDaily : utlDaily;
+  const monthly = isArchive ? archiveMonthly : utlMonthly;
+  const yearly = isArchive ? archiveYearly : utlYearly;
+
+const total = isArchive ? archiveTotal : yearly;
 
 const rows =
   tab === "daily"
@@ -85,7 +116,7 @@ const rows =
     <Panel>
       <PanelHeading
         title="Generation history"
-        subtitle="Recorded UTL production only"
+        subtitle={SOURCE_SUBTITLES[source]}
         action={
           <div className="flex gap-2">
             <button
@@ -106,6 +137,26 @@ const rows =
         }
       />
       <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div
+          role="tablist"
+          aria-label="History source"
+          className="inline-flex rounded-xl border border-border/70 bg-muted/30 p-1"
+        >
+          {SOURCES.map((item) => (
+            <button
+              key={item.key}
+              role="tab"
+              aria-selected={source === item.key}
+              onClick={() => setSource(item.key)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-medium",
+                source === item.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <div
           role="tablist"
           aria-label="History range"
@@ -179,7 +230,7 @@ const rows =
   <div className="mb-6 h-[320px] w-full">
   <ResponsiveContainer width="100%" height="100%">
         {tab === "daily" ? (
-      <AreaChart data={visibleRows}>
+      <AreaChart data={rows}>
         <CartesianGrid stroke="#444" strokeDasharray="3 3" />
 
         <XAxis
@@ -208,7 +259,7 @@ const rows =
         />
       </AreaChart>
     ) : (
-      <BarChart data={visibleRows} barCategoryGap="25%">
+      <BarChart data={rows} barCategoryGap="25%">
         <CartesianGrid stroke="#444" strokeDasharray="3 3" />
 
         <XAxis
@@ -268,7 +319,9 @@ const rows =
             <p className="py-8 text-center text-sm text-muted-foreground">
               {search
                 ? "No history entries match your search."
-                : "No production data is available for this period."}
+                : source === "archive"
+                  ? "No archived generation data available for this period."
+                  : "No production data is available for this period."}
             </p>
           ) : null}
           {pageCount > 1 ? (

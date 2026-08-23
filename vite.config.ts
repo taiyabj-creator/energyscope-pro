@@ -85,10 +85,17 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
         navigateFallback: null,
+        // Load Web Push handlers inside the generated service worker
+        // (public/push-handlers.js is copied verbatim to the build output).
+        importScripts: ["/push-handlers.js"],
       },
 
       devOptions: {
-        enabled: true,
+        // Dev-mode generateSW runs Workbox against an empty <root>/dev-dist
+        // folder and crashes ("Couldn't find configuration for either
+        // precaching or runtime caching"). Production builds are unaffected
+        // by this flag - they always emit the full PWA into .output/public.
+        enabled: false,
       },
     }),
 

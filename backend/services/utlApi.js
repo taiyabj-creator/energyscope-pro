@@ -16,10 +16,7 @@ async function getPlantStatus(jwtToken, session) {
     throw new Error("UTL authentication token missing.");
   }
 
-  console.log(
-    "UTL token:",
-    session.utlToken.substring(0, 40)
-  );
+  console.log("UTL authentication token available.");
 
   const response = await utlFetch(
     jwtToken,

@@ -4,10 +4,17 @@ import { Panel, PanelHeading } from "@/components/ui/primitives";
 import { useTheme } from "@/context/ThemeContext";
 import { usePlantInfo } from "@/hooks/useSolarData";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDashboardAuth } from "@/context/DashboardAuthContext";
 import { useNavigate } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  fetchNotificationStatus,
+  getExistingSubscription,
+  getPushSupport,
+} from "@/services/pushService";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -27,19 +34,68 @@ function SettingsPage() {
   const { data: plant } = usePlantInfo();
   const { logout } = useDashboardAuth();
   const navigate = useNavigate();
-  
+
   const [notificationPermission, setNotificationPermission] = useState(
-  typeof Notification !== "undefined"
-    ? Notification.permission
-    : "default"
-);
+    typeof Notification !== "undefined" ? Notification.permission : "default",
+  );
 
-async function enableNotifications() {
-  if (typeof Notification === "undefined") return;
+  const pushSupport = getPushSupport();
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushState, setPushState] = useState<{
+    subscribedOnServer: number | null;
+    hasLocalSubscription: boolean;
+  }>({ subscribedOnServer: null, hasLocalSubscription: false });
 
-  const permission = await Notification.requestPermission();
-  setNotificationPermission(permission);
-}
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const local = await getExistingSubscription();
+      let server: number | null = null;
+      try {
+        server = (await fetchNotificationStatus()).subscribed;
+      } catch {
+        server = null;
+      }
+      if (!cancelled) setPushState({ subscribedOnServer: server, hasLocalSubscription: !!local });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function enableNotifications() {
+    if (!pushSupport.supported) return;
+
+    if (pushSupport.permission !== "granted") {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    }
+
+    setPushBusy(true);
+    try {
+      await enablePushNotifications();
+      const local = await getExistingSubscription();
+      let server: number | null = null;
+      try {
+        server = (await fetchNotificationStatus()).subscribed;
+      } catch {
+        server = null;
+      }
+      setPushState({ subscribedOnServer: server, hasLocalSubscription: !!local });
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function disableNotifications() {
+    setPushBusy(true);
+    try {
+      await disablePushNotifications();
+      setPushState({ subscribedOnServer: 0, hasLocalSubscription: false });
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -91,33 +147,63 @@ async function enableNotifications() {
           </div>
         </div>
         <div className="mt-4 flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
-  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary">
-    🔔
-  </span>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary">
+            🔔
+          </span>
 
-  <div className="flex-1">
-    <p className="text-sm font-medium">Browser Notifications</p>
+          <div className="flex-1">
+            <p className="text-sm font-medium">Browser Notifications</p>
 
-    <p className="mt-1 text-xs text-muted-foreground">
-      Status:{" "}
-      {notificationPermission === "granted"
-        ? "Enabled"
-        : notificationPermission === "denied"
-          ? "Blocked"
-          : "Not enabled"}
-    </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {!pushSupport.supported
+                ? "Status: Not supported on this device"
+                : pushState.hasLocalSubscription && notificationPermission === "granted"
+                  ? `Enabled · ${pushState.subscribedOnServer ?? "…"} device(s) registered`
+                  : notificationPermission === "denied"
+                    ? "Blocked"
+                    : "Not enabled"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Inverter online/offline alerts and the daily production summary are delivered even
+              when the app is closed.
+            </p>
 
-    {notificationPermission !== "granted" && (
-      <button
-        type="button"
-        onClick={enableNotifications}
-        className="mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium transition hover:bg-muted/50"
-      >
-        Enable Notifications
-      </button>
-    )}
-  </div>
-</div>
+            {pushSupport.supported && notificationPermission !== "granted" && (
+              <button
+                type="button"
+                onClick={enableNotifications}
+                disabled={pushBusy}
+                className="mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium transition hover:bg-muted/50 disabled:opacity-50"
+              >
+                Enable Notifications
+              </button>
+            )}
+            {pushSupport.supported &&
+              notificationPermission === "granted" &&
+              (!pushState.hasLocalSubscription || (pushState.subscribedOnServer ?? 0) === 0) && (
+                <button
+                  type="button"
+                  onClick={enableNotifications}
+                  disabled={pushBusy}
+                  className="mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium transition hover:bg-muted/50 disabled:opacity-50"
+                >
+                  Re-enable Push
+                </button>
+              )}
+            {pushSupport.supported &&
+              notificationPermission === "granted" &&
+              pushState.hasLocalSubscription && (
+                <button
+                  type="button"
+                  onClick={disableNotifications}
+                  disabled={pushBusy}
+                  className="ml-2 mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
+                >
+                  Disable
+                </button>
+              )}
+          </div>
+        </div>
       </Panel>
 
       <Panel delay={0.1}>
@@ -125,14 +211,12 @@ async function enableNotifications() {
           title="Exports & reports"
           subtitle="History exports use the values returned by UTL"
         />
-                  <div className="grid gap-3">
-         <button
-  type="button"
-  onClick={() =>
-    window.open("/api/export/csv", "_blank")
-  }
-  className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40"
->
+        <div className="grid gap-3">
+          <button
+            type="button"
+            onClick={() => window.open("/api/export/csv", "_blank")}
+            className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40"
+          >
             <div className="text-left">
               <p className="text-sm font-medium">Export CSV</p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -143,13 +227,10 @@ async function enableNotifications() {
           </button>
 
           <button
-  type="button"
-  onClick={() =>
-    window.open("/api/export/excel", "_blank")
-  }
-  className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40"
->
-
+            type="button"
+            onClick={() => window.open("/api/export/excel", "_blank")}
+            className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40"
+          >
             <div className="text-left">
               <p className="text-sm font-medium">Export Excel (.xlsx)</p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -158,8 +239,6 @@ async function enableNotifications() {
             </div>
             <Download className="size-5 text-solar" />
           </button>
-
-        
         </div>
       </Panel>
 
@@ -183,24 +262,21 @@ async function enableNotifications() {
       </Panel>
 
       <Panel delay={0.2}>
-  <PanelHeading
-    title="Account"
-    subtitle="Manage your dashboard session"
-  />
+        <PanelHeading title="Account" subtitle="Manage your dashboard session" />
 
-  <button
-    type="button"
-    onClick={async () => {
-     await logout();
-     localStorage.removeItem("utl_token");
-     navigate({ to: "/login" });
-      }}
-    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400 transition hover:bg-red-500/20"
-  >
-    <LogOut className="size-4" />
-    Logout
-  </button>
-</Panel>
+        <button
+          type="button"
+          onClick={async () => {
+            await logout();
+            localStorage.removeItem("utl_token");
+            navigate({ to: "/login" });
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400 transition hover:bg-red-500/20"
+        >
+          <LogOut className="size-4" />
+          Logout
+        </button>
+      </Panel>
     </div>
   );
 }

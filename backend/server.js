@@ -16,8 +16,11 @@ const inverterRouter = require("./routes/inverter");
 const exportRouter = require("./routes/export");
 const predictionRouter = require("./routes/prediction");
 const maintenanceRouter = require("./routes/maintenance");
+const archiveRouter = require("./routes/archive");
 const authRouter = require("./routes/auth");
 const healthRouter = require("./routes/health");
+const notificationsRouter = require("./routes/notifications");
+const { createMonitor } = require("./services/notificationMonitor");
 const { authMiddleware } = require("./middleware/auth");
 const requiredEnv = [
   "JWT_SECRET",
@@ -47,10 +50,12 @@ const loginLimiter = rateLimit({
 app.use(
   cors({
         origin: [
-      "http://localhost:8080",
-      "http://127.0.0.1:8080",
-      "http://192.168.29.58:8080",
-    ],
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+  "http://192.168.29.58:8080",
+],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: [
       "Content-Type",
@@ -81,6 +86,8 @@ app.use("/api/plant", authMiddleware, plantRouter);
 app.use("/api/export", authMiddleware, exportRouter);
 app.use("/api/prediction", authMiddleware, predictionRouter);
 app.use("/api/maintenance", authMiddleware, maintenanceRouter);
+app.use("/api/archive", authMiddleware, archiveRouter);
+app.use("/api/notifications", authMiddleware, notificationsRouter);
 
 app.use("/api/health", healthRouter);
 app.use("/api", configRouter);
@@ -100,4 +107,13 @@ app.listen(PORT, async () => {
 
     // Startup login removed.
   // Authentication is performed through /api/auth/login when users sign in.
+
+  // Background push-notification monitor runs inside this existing
+  // long-running process (no second server). It degrades to state-tracking
+  // only when VAPID is not configured; subscriptions simply receive nothing.
+  try {
+    createMonitor().start();
+  } catch (err) {
+    console.error(`Notification monitor failed to start: ${err.message}`);
+  }
 });

@@ -95,23 +95,12 @@ function createSession(sessionId, data) {
   now,
   data.remember_me ? 1 : 0
 );
-  const verify = getStmt.get(sessionId);
 
-console.log("Inserted session:", verify);
+  console.log("Session created.");
 }
 
 function getSession(sessionId) {
   const row = getStmt.get(sessionId);
-
-  console.log(
-  "Looking for token:",
-  sessionId.substring(0, 40)
-);
-
-console.log(
-  "Database row:",
-  row
-);
 
   if (!row) {
     return null;
