@@ -1,437 +1,209 @@
 # EnergyScope Contribution Guide
 
-This document defines the development standards for the EnergyScope project.
-
-All contributors, including AI coding assistants, must follow these guidelines.
+This document defines the development standards and workflow for the EnergyScope
+Pro project. All contributors — human and AI assistants alike — must follow it.
 
 ---
 
 # Project Philosophy
 
-EnergyScope prioritizes:
+EnergyScope Pro prioritizes:
 
 - Readability
 - Maintainability
-- Scalability
-- Performance
 - Security
+- Correctness over cleverness
 
 Avoid quick fixes that introduce long-term technical debt.
 
 ---
 
-# Before Writing Code
+# Repository Setup
 
-Always:
+Prerequisites:
 
-1. Read ARCHITECTURE.md.
-2. Read PROJECT_ROADMAP.md.
-3. Understand the existing implementation.
-4. Preserve architecture.
-5. Avoid unnecessary refactoring.
+- **Node.js 22 LTS or newer** (the production server runs Node 22; Vite 8
+  requires modern Node) and npm
+- Git
+- Linux/Ubuntu is the reference environment (development and production)
+- Python 3 is required at runtime for the backend's UTL login helper
+  (`backend/adapters/python/utl_api.py`)
 
-Never change architecture without strong technical justification.
+```bash
+git clone https://github.com/taiyabj-creator/energyscope-pro.git
+cd energyscope-pro
+npm install          # frontend / app workspace
+
+cd backend
+cp .env.example .env # then fill in real values locally (never commit .env)
+npm install
+```
+
+---
+
+# Available Scripts
+
+Frontend (repository root, from `package.json`):
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Vite dev server (TanStack Start + Nitro) |
+| `npm run build` | Production build into `.output/` |
+| `npm run build:dev` | Development-mode build |
+| `npm run preview` | Preview a production build locally |
+| `npm run lint` | Run ESLint |
+| `npm run format` | Format code with Prettier |
+
+Backend (`backend/package.json`):
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Start Express with nodemon auto-reload |
+| `npm start` | Start Express without auto-reload |
+
+During development the Nitro dev server proxies `/api/**` to
+`API_PROXY_TARGET` (default `http://127.0.0.1:3001`), so the backend must be
+running for data-driven pages to work.
+
+---
+
+# Verification Before Submitting Changes
+
+The project currently has **no automated test suite** in the repository; do not
+invent test commands. Verification means:
+
+1. `npx tsc --noEmit` — TypeScript must pass (frontend)
+2. `npm run lint` — ESLint must pass (frontend)
+3. `npm run build` — production build must succeed end-to-end
+4. Backend changes: start the server (`npm run dev` in `backend/`) and smoke-test
+   the affected endpoints manually (e.g., `curl http://127.0.0.1:3001/api/health`)
+5. PWA/service-worker changes: verify the build output contains a consistent
+   `.output/public/sw.js` that references only assets that exist in
+   `.output/public/assets/`
+
+Any automated tests added in the future must be wired into real npm scripts and
+documented here.
 
 ---
 
 # Development Workflow
 
-Every new feature should follow this order:
+For every change:
 
 1. Understand the requirement.
-2. Design the solution.
-3. Review existing code.
+2. Inspect the existing implementation first.
+3. Design the smallest appropriate solution.
 4. Implement.
-5. Test.
+5. Verify (see above).
 6. Refactor if needed.
-7. Update documentation.
+7. Update documentation if architecture, workflow, or roadmap changed.
 
 ---
 
-# Git Branch Strategy
+# Git Workflow
 
-main
+Branches:
 
-Production-ready code only.
+- `main` — stable, deployable code
+- `feature/<name>` / `fix/<name>` — one topic per branch
 
-development
+Avoid committing directly to `main`.
 
-Current development branch.
+Commit messages: concise imperative summaries; conventional prefixes where they
+fit, matching existing history:
 
-feature/<feature-name>
-
-One feature per branch.
-
-Examples
-
-feature/logger-health
-
-feature/weather
-
-feature/pwa
-
-feature/export
-
-Never develop directly on main.
-
----
-
-# Commit Message Format
-
-Examples
-
+```
 feat: add logger uptime tracking
-
-fix: correct inverter power calculation
-
-refactor: migrate chart service to FastAPI
-
+fix: make service worker registration resilient
 docs: update architecture
+refactor: extract archive gap scanner
+```
 
-style: improve dashboard spacing
+Avoid generic messages ("update", "changes", "done").
 
-test: add API tests
+Pull requests / reviews:
 
-Avoid generic commit messages such as:
-
-update
-
-changes
-
-fix
-
-done
+- One logical change per PR; no unrelated modifications
+- State what changed, why, and how it was verified
+- Preserve API contracts unless the task explicitly requires a change; call out
+  any contract change loudly
+- Keep diffs reviewable; prefer a series of small commits for larger work
 
 ---
 
-# Folder Structure
+# Environment Variables
 
-Frontend
-
-src/
-
-components/
-
-hooks/
-
-services/
-
-api/
-
-routes/
-
-context/
-
-types/
-
-utils/
-
-Backend
-
-app/
-
-routers/
-
-services/
-
-models/
-
-schemas/
-
-database/
-
-core/
-
-utils/
+- Copy `backend/.env.example` to `backend/.env` and fill in real values locally.
+- **Never commit** `.env` files, tokens, API keys, passwords, cookies, or session
+  material. They are gitignored by design; keep it that way.
+- Frontend build-time variables (`VITE_API_BASE_URL`, `VITE_APP_VERSION`) and the
+  Nitro proxy target (`API_PROXY_TARGET`) are non-secret; see README.md for the
+  full list of variable names.
+- Never log secret values; when logging request context (e.g., push endpoints),
+  log origins/shapes, not capability URLs or key material.
 
 ---
 
-# Component Guidelines
+# Security Rules
 
-Keep components small.
-
-One responsibility per component.
-
-Avoid files larger than ~300 lines unless justified.
-
-Split reusable UI into separate components.
-
-Prefer composition over inheritance.
+- The frontend must never receive UTL credentials, UTL tokens, database files,
+  or third-party secrets.
+- All solar data flows through the authenticated Express backend.
+- New data routes must be protected by the existing auth middleware unless there
+  is an explicit reason (health/config are the current exceptions).
+- Never expose private server IPs, SSH details, or infrastructure specifics in
+  code, logs, or documentation.
 
 ---
 
-# React Guidelines
+# Code Guidelines
 
-Use:
+## React / frontend
 
-Functional components
+- Functional components + hooks, strict TypeScript
+- TanStack Query for data fetching; typed API clients in `src/api/`
+- Keep components small (one responsibility); split reusable UI out early
+- Mobile-first responsive design; every page must work from 360px up
+- Tailwind utilities + existing shadcn/ui-style components; avoid inline styles
+- No business logic or credential handling in UI code
 
-Hooks
+## Backend
 
-Strict TypeScript
-
-React Query
-
-Avoid:
-
-Class components
-
-Prop drilling
-
-Large global state
-
-Unnecessary re-renders
-
-Business logic inside UI
+- Routes stay thin; business logic lives in `backend/services/`
+- Storage access lives in `backend/data/*Database.js` modules and services
+- Preserve response shapes; additive changes over breaking changes
+- Log failures meaningfully without leaking secrets
 
 ---
 
-# Backend Guidelines
+# Documentation Updates
 
-FastAPI is the single source of truth.
+Documentation is part of the project and must stay synchronized:
 
-Business logic belongs inside services.
-
-Routers should remain thin.
-
-Database access belongs in repositories/services.
-
-Never duplicate API logic.
+- Architecture changed → update `ARCHITECTURE.md`
+- Milestones/priorities changed → update `PROJECT_ROADMAP.md`
+- Workflow changed → update this file
+- AI-assistant rules changed → update `AGENTS.md`
 
 ---
 
-# Database Rules
-
-Database stores only application-owned data.
-
-Never store:
-
-Live inverter power
-
-Daily production
-
-Monthly production
-
-Live plant status
-
-Always fetch live production data from the UTL API.
-
----
-
-# API Design
-
-Keep endpoints RESTful.
-
-Examples
-
-GET /api/inverter
-
-GET /api/plant
-
-GET /api/weather
-
-GET /api/logger
-
-POST /api/maintenance
-
-PUT /api/settings
-
-DELETE /api/maintenance/{id}
-
-Avoid breaking API compatibility.
-
----
-
-# Error Handling
-
-Never silently ignore exceptions.
-
-Return meaningful HTTP responses.
-
-Log unexpected failures.
-
-Display user-friendly frontend messages.
-
----
-
-# Security
-
-Never commit:
-
-.env
-
-token.txt
-
-Passwords
-
-API keys
-
-JWT secrets
-
-Private credentials
-
-Always use environment variables.
-
-Never expose UTL credentials to the frontend.
-
----
-
-# Styling
-
-Use Tailwind utilities.
-
-Use shadcn/ui components whenever possible.
-
-Avoid inline styles unless necessary.
-
-Maintain consistent spacing.
-
-Prefer responsive layouts first.
-
----
-
-# Responsive Design
-
-The project is mobile-first.
-
-Every new page must work on:
-
-360px
-
-390px
-
-430px
-
-768px
-
-1024px
-
-Desktop
-
-Never design desktop first.
-
----
-
-# PWA
-
-Every feature should work inside the installed PWA.
-
-Avoid browser-only assumptions.
-
-Support offline shell.
-
-Support future push notifications.
-
----
-
-# Performance
-
-Prefer lazy loading.
-
-Minimize bundle size.
-
-Avoid unnecessary dependencies.
-
-Use caching where appropriate.
-
-Optimize API requests.
-
----
-
-# Testing
-
-Every significant feature should be tested.
-
-Backend
-
-API tests
-
-Service tests
-
-Frontend
-
-Component rendering
-
-Responsive behavior
-
-Data loading
-
----
-
-# Documentation
-
-Whenever architecture changes:
-
-Update ARCHITECTURE.md
-
-Whenever milestones change:
-
-Update PROJECT_ROADMAP.md
-
-Whenever development workflow changes:
-
-Update CONTRIBUTING.md
-
-Documentation is part of the project.
-
----
-
-# AI Assistant Rules
-
-Before generating code:
-
-Read ARCHITECTURE.md
-
-Read PROJECT_ROADMAP.md
-
-Read CONTRIBUTING.md
-
-Never invent architecture.
-
-Never replace existing libraries without justification.
-
-Do not introduce new dependencies unless necessary.
-
-Explain significant design decisions.
-
-Prefer incremental improvements over rewrites.
-
-If unsure, inspect the project before modifying files.
-
----
-
-# Code Quality Checklist
-
-Before submitting changes:
-
-✓ TypeScript passes
-
-✓ Linter passes
-
-✓ Build passes
-
-✓ No mock data introduced
-
-✓ Responsive layout verified
-
-✓ No secrets committed
-
-✓ API contracts preserved
-
-✓ Documentation updated if necessary
+# Production Considerations
+
+- Production runs on OCI under PM2 behind nginx on a custom HTTPS domain;
+  infrastructure specifics are private and excluded from documentation.
+- Deploy flow: pull latest commit → `npm ci` (both workspaces) → `vite build` →
+  restart the PM2 frontend process. Builds must come from a clean tree so
+  generated PWA artifacts are reproducible.
+- The archive collector schedule lives in
+  `backend/ecosystem.archive.config.js`; changes there require explicit review
+  since they affect production data collection timing.
+- Do not modify production configuration, databases, or environment files as a
+  side effect of feature work.
 
 ---
 
 # Long-Term Goal
 
-EnergyScope should become a professional-grade solar monitoring platform that is:
-
-- Modern
-- Fast
-- Secure
-- Installable
-- Scalable
-- Easy to maintain
-- Better than the official UTL application
-
-Every contribution should move the project closer to this goal.
+EnergyScope Pro should remain a professional-grade, secure, installable solar
+monitoring platform that exceeds the capabilities of the official UTL
+application while staying easy to maintain.

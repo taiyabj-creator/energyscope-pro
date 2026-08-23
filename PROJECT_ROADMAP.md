@@ -1,580 +1,147 @@
 # EnergyScope Development Roadmap
 
-> Version: 1.0
 > Status: Active Development
+> Current release: **v1.1.0** (commit `3d7c951 — Release v1.1.0`)
+>
+> This roadmap reflects the CURRENT state of the repository. Items are labelled
+> Completed / In Progress / Planned / Future. Speculative ideas live under
+> Long-Term Vision and are not committed work.
 
 ---
 
-# Project Vision
+## Current Release
 
-EnergyScope aims to become the most modern and feature-rich monitoring dashboard for UTL Solar systems.
+**v1.1.0** — EnergyScope Pro is a deployed, production PWA for monitoring UTL
+Solar inverters.
 
-The project is designed as a Progressive Web App (PWA) that works seamlessly on desktop, tablet, and mobile while providing capabilities beyond the official UTL application.
+Current production state:
 
----
+- Hosted on Oracle Cloud Infrastructure (OCI) with PM2 process management
+- Served over HTTPS on a custom domain behind an nginx reverse proxy
+- TanStack Start + Nitro frontend (`node .output/server/index.mjs`) proxying
+  same-origin `/api/**` to the Express backend
+- Installable PWA with offline app shell and Web Push notifications
+- Daily production archiving running three times per day via a scheduled,
+  gap-aware PM2 collector
 
-# Current Development Status
+Major capabilities actually implemented:
 
-## Phase
-
-Prototype Complete
-
-### Completed
-
-- Reverse engineered UTL login API
-- Reverse engineered Plant Status endpoint
-- Reverse engineered InverterDevice endpoint
-- Reverse engineered Daily chart endpoint
-- Reverse engineered Monthly chart endpoint
-- Reverse engineered Yearly chart endpoint
-- Reverse engineered Total chart endpoint
-- React dashboard
-- Responsive layout
-- Energy chart
-- Sidebar
-- Theme system
-- Metric cards
-- Backend prototype
-- Live inverter integration
-- Live chart integration
+- Live inverter monitoring (plant, devices, logger diagnostics)
+- Live generation charts (daily / monthly / yearly / total)
+- Historical production data with automatic daily archival and gap backfill
+- Production analytics, predictions, and performance score
+- Weather dashboard and solar prediction backed by Open-Meteo
+- Maintenance history module
+- Data export (Excel / PDF / ZIP)
+- Authentication with JWT and encrypted server-side sessions incl. automatic
+  UTL token refresh
+- Web push notifications: inverter online/offline alerts with debounce, daily
+  production summary after sunset, per-device subscription management
 
 ---
 
-# Milestone 1
+## Completed
 
-## Remove Remaining Mock Data
+Verified from the repository:
 
-Status:
-
-In Progress
-
-Tasks
-
-- Replace mock plant information
-- Replace mock weather
-- Replace mock analytics
-- Replace mock maintenance
-- Replace mock notifications
-- Replace mock history
-- Replace mock devices
-- Replace mock logger information
-
-Goal
-
-Entire dashboard should display only live or database-backed data.
-
----
-
-# Milestone 2
-
-## FastAPI Migration
-
-Status
-
-Planned
-
-Tasks
-
-- Create FastAPI project
-- Configure SQLAlchemy
-- Configure Alembic
-- Create service layer
-- Create routers
-- Create dependency injection
-- Move UTL API integration
-- Replace Express backend
-- Preserve frontend API contracts
-
-Goal
-
-Remove Express completely.
+- Reverse-engineered UTL Solar RMS API integration (login, plant status,
+  plant info, inverter/device listing, daily/monthly/yearly/total charts),
+  including a Python login helper spawned by the backend adapter
+- React 19 + TypeScript dashboard with responsive mobile-first layout,
+  dark/light theming, metric cards, Recharts visualizations
+- TanStack Start application shell (file-based routing, SSR via Nitro)
+- Express backend as the single source of truth; frontend never talks to the
+  UTL API directly
+- JWT authentication + encrypted session storage + automatic UTL token refresh
+- Historical archive: gap-aware, idempotent collector (`backend/scripts/archive-collector.js`)
+  scheduled through PM2 at 06:00 / 13:00 / 20:00 IST
+- Archive query API (daily / monthly / yearly / lifetime aggregates)
+- Maintenance history module
+- Excel/PDF/ZIP export generation
+- Weather page fed by the public Open-Meteo API (client-side) plus server-side
+  Open-Meteo use for predictions and notification content
+- Daily energy prediction + performance score endpoints
+- PWA: installable manifest, Workbox service worker precache, auto-update flow
+- Web Push notifications end-to-end (VAPID, per-account subscriptions,
+  ownership-checked unsubscribe, failure pruning on send)
+- Production deployment on OCI with PM2, nginx, HTTPS custom domain
+- Dependency hygiene fix for `uuid` advisory via npm overrides in the backend
 
 ---
 
-# Milestone 3
+## Current Focus
 
-## Database Integration
+Visible unfinished work in the project:
 
-Status
-
-Planned
-
-Database
-
-Turso
-
-Tables
-
-- Users
-- Plants
-- Preferences
-- Maintenance
-- Logger Events
-- Notification Settings
-
-Goal
-
-Store only application-owned data.
+1. **Automated tests (In Progress conceptually, not yet in repo)** — there is
+   currently **no automated test suite in the repository**. Establishing backend
+   API/service tests and basic frontend checks is the top engineering priority.
+2. **Push notification rollout hardening** — service-worker registration
+   resilience was just improved (`fix: make service worker registration
+   resilient`); real-world verification across Android/desktop Chrome continues.
+3. **Reproducible production builds** — ensure server builds always run from a
+   clean tree with `npm ci` so generated PWA artifacts are byte-stable.
+4. **Operational observability** — log rotation/monitoring for the PM2 processes.
 
 ---
 
-# Milestone 4
+## Near-Term Roadmap
 
-## Plant Configuration
+Planned engineering priorities based on the existing codebase:
 
-Status
-
-Planned
-
-Features
-
-- Editable plant name
-- Editable location
-- Latitude
-- Longitude
-- Installation date
-- Capacity
-- Timezone
-
-Goal
-
-No hardcoded plant information.
+- **Backend test suite (Planned)** — cover auth/session lifecycle, archive
+  collector idempotency, subscription upsert/unsubscribe ownership, export
+  generation.
+- **Editable plant metadata (Planned)** — move beyond static
+  `backend/config/plant.json` for name/location/timezone/capacity.
+- **Maintenance storage migration (Planned)** — migrate `maintenance.json` to
+  SQLite for consistency with other stores.
+- **PWA update UX (Planned)** — surface "new version available" states instead of
+  silent auto-reload behaviour.
+- **Dependency audit automation (Planned)** — periodic `npm audit` gates for both
+  packages.
 
 ---
 
-# Milestone 5
+## Medium-Term Roadmap
 
-## Logger Health
+Features that are genuinely planned:
 
-Status
-
-Planned
-
-Features
-
-Live Status
-
-- Online
-- Offline
-- Last Seen
-
-History
-
-- Online timestamps
-- Offline timestamps
-- Downtime
-- Uptime
-
-Statistics
-
-- Daily uptime
-- Monthly uptime
-- Availability %
-- Longest outage
-- Average uptime
-
-Charts
-
-- Uptime chart
-- Calendar view
-- Timeline
-
-Notifications
-
-- Logger offline
-- Logger online
-- Recovery duration
-
-Exports
-
-- Excel
-- CSV
-
-Goal
-
-Provide logger diagnostics beyond the official application.
+- **Multi-user support (Planned)** — multiple dashboard accounts with per-user
+  sessions and preferences over the shared plant feed.
+- **Seasonal comparisons (Planned)** — year-over-year production comparisons
+  built on the existing archive aggregate APIs.
+- **AI-powered analytics groundwork (Planned)** — anomaly detection on archived
+  daily data (e.g., underperformance days), building on prediction/performance
+  services already present.
+- **Scheduled reports (Planned)** — periodic email/PDF production summaries from
+  the archive.
+- **Notification expansion (Planned)** — user-tunable thresholds for
+  production/fault alerts alongside the existing inverter status notifications.
 
 ---
 
-# Milestone 6
+## Long-Term Vision
 
-## Weather Module
+Future ideas consistent with the project's direction (not committed):
 
-Status
-
-Planned
-
-Features
-
-Current weather
-
-Hourly forecast
-
-Daily forecast
-
-Cloud cover
-
-Rain prediction
-
-Temperature
-
-Humidity
-
-Wind speed
-
-Solar irradiance (future)
-
-Goal
-
-Improve solar production insights.
+- Multiple plants / fleet view
+- Advanced analytics: weather-correlated efficiency, capacity factor trends,
+  best/worst production insights
+- AI fault detection and maintenance suggestions
+- Device/inverter comparison views
+- Installer/multi-site dashboards
+- Home Assistant / MQTT integrations
+- Energy cost and carbon-savings calculator
+- Public shareable read-only dashboards
 
 ---
 
-# Milestone 7
-
-## Maintenance Module
-
-Status
-
-Planned
-
-Features
-
-Cleaning history
-
-Inspection history
-
-Repair history
-
-Maintenance reminders
-
-Photo attachments
-
-Notes
-
-Goal
-
-Track long-term plant maintenance.
-
----
-
-# Milestone 8
-
-## Export System
-
-Status
-
-Planned
-
-Supported Formats
-
-- Excel (.xlsx)
-- CSV
-
-Future
-
-- PDF
-
-Goal
-
-Professional reporting.
-
----
-
-# Milestone 9
-
-## Progressive Web App
-
-Status
-
-Planned
-
-Required
-
-Installable
-
-Offline shell
-
-App icon
-
-Splash screen
-
-Auto updates
-
-Full screen
-
-Responsive
-
-Desktop support
-
-Android support
-
-Future
-
-Push notifications
-
-Goal
-
-Native app experience without an app store.
-
----
-
-# Milestone 10
-
-## Authentication
-
-Status
-
-Planned
-
-Features
-
-Secure login
-
-Session management
-
-User preferences
-
-Password reset
-
-Future
-
-Multi-user support
-
-Goal
-
-Support multiple dashboard users securely.
-
----
-
-# Milestone 11
-
-## Notifications
-
-Status
-
-Planned
-
-Types
-
-Logger offline
-
-Logger online
-
-Maintenance reminder
-
-Production alert
-
-Fault alert
-
-Weather alert
-
-Future
-
-Email
-
-Telegram
-
-WhatsApp
-
-Push Notifications
-
-Goal
-
-Real-time awareness.
-
----
-
-# Milestone 12
-
-## Analytics
-
-Status
-
-Planned
-
-Features
-
-Daily analytics
-
-Monthly analytics
-
-Yearly analytics
-
-Seasonal comparison
-
-Weather correlation
-
-Efficiency
-
-Capacity factor
-
-Best production day
-
-Worst production day
-
-Goal
-
-Advanced production insights.
-
----
-
-# Milestone 13
-
-## Deployment
-
-Status
-
-Planned
-
-Frontend
-
-Vercel
-
-Backend
-
-Render
-
-Database
-
-Turso
-
-Domain
-
-Custom domain
-
-HTTPS
-
-Enabled
-
-Goal
-
-Production-ready deployment.
-
----
-
-# Milestone 14
-
-## Performance Optimization
-
-Status
-
-Planned
-
-Tasks
-
-Lazy loading
-
-Route splitting
-
-Image optimization
-
-Caching
-
-API optimization
-
-Database optimization
-
-Bundle optimization
-
-Goal
-
-Fast loading on all devices.
-
----
-
-# Milestone 15
-
-## Security Audit
-
-Status
-
-Planned
-
-Tasks
-
-Environment variables
-
-Secret removal
-
-Authentication review
-
-Input validation
-
-Rate limiting
-
-HTTPS verification
-
-Dependency audit
-
-Goal
-
-Production-grade security.
-
----
-
-# Milestone 16
-
-## Final Release
-
-Status
-
-Planned
-
-Checklist
-
-- No mock data
-- Fully responsive
-- FastAPI backend
-- Turso database
-- PWA complete
-- Weather integrated
-- Maintenance complete
-- Logger Health complete
-- Excel export
-- Authentication
-- Deployment
-- Documentation
-- GitHub cleanup
-
-Goal
-
-Version 1.0 Release
-
----
-
-# Future Ideas
-
-- Multiple plants
-- Multi-inverter support
-- AI production prediction
-- AI fault detection
-- AI maintenance suggestions
-- Energy cost calculator
-- Carbon savings
-- Battery support
-- Home Assistant integration
-- MQTT integration
-- Smart home integration
-- Public sharing dashboard
-- Installer dashboard
-- Fleet management
-
----
-
-# Development Principles
-
-- Build production-quality software.
-- Avoid technical debt whenever practical.
-- Keep frontend presentation-focused.
-- Keep backend as the single source of truth.
+## Development Principles
+
+- Build production-quality software; avoid avoidable technical debt.
+- Keep the frontend presentation-focused; keep integration/security logic in the
+  backend.
 - Preserve API compatibility during refactoring.
-- Prioritize maintainability over shortcuts.
 - Every new feature should align with ARCHITECTURE.md.
-- Complete one milestone before moving to the next whenever possible.
-
----
-
-# Success Criteria
-
-EnergyScope should become a modern, installable, secure, scalable, and maintainable solar monitoring platform that exceeds the capabilities of the official UTL application while remaining completely free to host within the constraints of the chosen architecture.
+- Prefer completing and hardening existing features before adding new ones.
