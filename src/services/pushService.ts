@@ -18,6 +18,9 @@
 import { apiRequest } from "@/api/client";
 
 const SW_READY_TIMEOUT_MS = 8000;
+// First-visit installs precache the full app bundle (~9 MB); allow enough
+// time for a known installing/waiting worker to finish activating.
+const SW_ACTIVATION_TIMEOUT_MS = 20000;
 
 function logDiagnostics(stage: string, detail?: unknown): void {
   const extra =
@@ -72,9 +75,58 @@ export function getPushSupport(): PushSupport {
 }
 
 /**
+ * Wait until `reg`'s installing/waiting worker reaches "activated" (bounded).
+ * Resolves with the registration once active; rejects on redundant workers
+ * (install failure) or timeout.
+ */
+function waitForActivation(
+  reg: ServiceWorkerRegistration,
+  timeoutMs: number,
+): Promise<ServiceWorkerRegistration> {
+  const worker = reg.installing ?? reg.waiting;
+  if (!worker || reg.active) return Promise.resolve(reg);
+
+  return new Promise((resolve, reject) => {
+    const onStateChange = () => {
+      if (worker.state === "activated") {
+        cleanup();
+        resolve(reg);
+      } else if (worker.state === "redundant") {
+        cleanup();
+        reject(
+          Object.assign(new Error("Service worker install failed (redundant)"), {
+            code: "sw-unavailable",
+          }),
+        );
+      }
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      worker.removeEventListener("statechange", onStateChange);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(
+        Object.assign(new Error("Service worker did not activate in time"), {
+          code: "sw-unavailable",
+        }),
+      );
+    }, timeoutMs);
+
+    worker.addEventListener("statechange", onStateChange);
+  });
+}
+
+/**
  * Resolve the controlling service worker registration without the risk of
  * `navigator.serviceWorker.ready` hanging forever on a stuck install
  * (observed on Android Chrome after earlier broken deployments).
+ *
+ * Order of preference:
+ *   1. a registration with an ACTIVE worker (or waiting + page controlled)
+ *   2. a registration whose worker is installing/waiting -> await its
+ *      activation explicitly (bounded ~20s) so first-visit installs succeed
+ *   3. bounded global `ready` race as the last resort
  */
 async function getRegistration(): Promise<ServiceWorkerRegistration> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
@@ -92,6 +144,21 @@ async function getRegistration(): Promise<ServiceWorkerRegistration> {
     (r) => r.active || (r.waiting && navigator.serviceWorker.controller),
   );
   if (activeOrWaiting) return activeOrWaiting;
+
+  // A registration exists but its worker is still installing/waiting: wait
+  // for THAT worker to activate instead of failing after the short global
+  // ready timeout (first-visit installs can take longer than SW_READY_TIMEOUT_MS).
+  const activating = registrations.find((r) => r.installing || r.waiting);
+  if (activating) {
+    try {
+      const reg = await waitForActivation(activating, SW_ACTIVATION_TIMEOUT_MS);
+      logDiagnostics("service worker activated", activating.scope);
+      return reg;
+    } catch (err) {
+      logDiagnostics("service-worker activation wait failed", err);
+      // Fall through to the bounded global ready race below.
+    }
+  }
 
   // Nothing usable yet -> wait for ready, but bounded so the UI can recover.
   const readyPromise = navigator.serviceWorker.ready as Promise<ServiceWorkerRegistration>;

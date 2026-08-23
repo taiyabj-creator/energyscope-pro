@@ -1,13 +1,12 @@
-
 import { registerSW } from "virtual:pwa-register";
-import {
-  createStart,
-  createCsrfMiddleware,
-  createMiddleware,
-} from "@tanstack/react-start";
+import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
 registerSW({
   immediate: true,
+  // Registration/install failures are otherwise swallowed silently inside
+  // vite-plugin-pwa; surface them so diagnosis is possible from the console.
+  onRegisteredSW: (url, reg) => console.info("[pwa] registered", url, reg?.active?.state),
+  onRegisterError: (e) => console.error("[pwa] registration failed", e),
 });
 
 import { renderErrorPage } from "./lib/error-page";
