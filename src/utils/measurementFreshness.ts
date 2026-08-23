@@ -18,5 +18,17 @@ export function formatMeasurementFreshness(timestamp?: string): string {
   if (ageMinutes === null) return "Update time unavailable";
   if (ageMinutes === 0) return "Updated just now";
 
-  return `Updated ${ageMinutes} min ago`;
+  if (ageMinutes < 60) {
+    return `Updated ${ageMinutes} min ago`;
+  }
+
+  const hours = Math.floor(ageMinutes / 60);
+  const minutes = ageMinutes % 60;
+
+  if (hours < 24) {
+    return `Updated ${hours}h ${String(minutes).padStart(2, "0")}min ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `Updated ${days}d ${String(hours % 24).padStart(2, "0")}h ago`;
 }

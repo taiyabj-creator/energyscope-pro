@@ -336,9 +336,186 @@ function enumerateDates(fromStr, toStr) {
   return out;
 }
 
-async function runCollection(dates, triggerType, deps = {}) {
+/** Yesterday's Asia/Kolkata calendar date, computed without host-TZ trust.
+ *  Never returns the current (possibly incomplete) solar day. */
+function previousCompletedIstDay(now = new Date()) {
+  const today = archiveService.istDateString(now);
+  const cursor = Date.parse(`${today}T00:00:00Z`) - 24 * 60 * 60 * 1000;
+  return new Date(cursor).toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------------------
+// Gap-aware scanning
+// ---------------------------------------------------------------------------
+
+/**
+ * Verifies an existing solar_generation_daily row against the collector's own
+ * acceptance rules (same thresholds as live collection):
+ *   - generation_kwh present, finite, non-negative
+ *   - source is one of the two known provenance labels
+ *   - charts/daily_integrated rows must carry a non-zero points_count
+ *   - when a monthly cross-check value exists, its ratio must sit inside the
+ *     CHECK_RATIO_WARN band used during collection
+ * charts/monthly_fallback rows are accepted (deliberate continuity-over-holes
+ * policy; their provenance stays flagged in `source` forever).
+ */
+function isArchivedRecordValid(row) {
+  if (!row) return false;
+
+  const kwh = Number(row.generation_kwh);
+  if (!Number.isFinite(kwh) || kwh < 0) return false;
+
+  const source = String(row.source || "");
+  if (source !== "charts/daily_integrated" && source !== "charts/monthly_fallback") {
+    return false;
+  }
+  if (source === "charts/daily_integrated" && !(Number(row.points_count) > 0)) {
+    return false;
+  }
+
+  const monthly = row.check_monthly_value;
+  if (monthly !== null && monthly !== undefined && Number(monthly) > 0) {
+    const ratio = Number(row.check_ratio);
+    if (
+      !Number.isFinite(ratio) ||
+      ratio < CHECK_RATIO_WARN_LOW ||
+      ratio > CHECK_RATIO_WARN_HIGH
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Required archive window [start..end]:
+ *   end   = previous completed Asia/Kolkata day (never today)
+ *   start = ARCHIVE_START_DATE when configured, otherwise the earliest day
+ *           already present in the archive (conservative default: the
+ *           collector never backfills beyond existing coverage unless the
+ *           operator explicitly widens the window).
+ */
+function computeGapScanRange(deps = {}) {
+  const service = deps.archiveService || archiveService;
+
+  let start = null;
+  const configured = (process.env.ARCHIVE_START_DATE || "").trim();
+  if (configured) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(configured)) {
+      start = configured;
+    } else {
+      log(
+        `WARN ARCHIVE_START_DATE '${configured}' is not a valid YYYY-MM-DD date; ignoring.`
+      );
+    }
+  }
+  if (!start) {
+    start = service.getCoverage()?.earliest ?? null;
+  }
+
+  const nowFn = typeof deps.now === "function" ? deps.now : undefined;
+  const end = previousCompletedIstDay(nowFn ? nowFn() : new Date());
+
+  return { start, end };
+}
+
+/**
+ * Scheduled-mode entry point. Walks EVERY calendar date in the required
+ * range chronologically, verifies what already exists, collects only what is
+ * missing or inconsistent, and leaves upstream-unavailable dates untouched so
+ * the next run retries them. Idempotent: safe to run any number of times.
+ */
+async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {}) {
+  const service = deps.archiveService || archiveService;
+  const { start, end } = computeGapScanRange(deps);
+
+  if (!start || start > end) {
+    log(`Nothing to scan (range=${start ?? "-"}..${end}).`);
+    if (!start) {
+      log("Set ARCHIVE_START_DATE to enable historical backfill before the first archived day.");
+    }
+    const runId = service.startRun(triggerType);
+    service.finishRun(runId, { status: "success", datesRequested: 0, datesStored: 0 });
+    return {
+      status: "success",
+      range: { start, end },
+      checked: 0,
+      alreadyValid: 0,
+      stored: 0,
+      inserted: 0,
+      updated: 0,
+      unchanged: 0,
+      failures: [],
+      remainingMissing: 0,
+      coverage: service.getCoverage(),
+    };
+  }
+
+  const dates = enumerateDates(start, end);
+  const existingRows = service.getDailyRecords({ from: start, to: end });
+  const byDate = new Map(existingRows.map((r) => [r.generation_date, r]));
+
+  const missing = [];
+  const stale = [];
+  let alreadyValid = 0;
+
+  for (const dateStr of dates) {
+    const row = byDate.get(dateStr);
+    if (!row) {
+      missing.push(dateStr);
+      log(`${dateStr} missing; collecting...`);
+    } else if (isArchivedRecordValid(row)) {
+      alreadyValid++;
+      log(`${dateStr} already archived and verified; skipping.`);
+    } else {
+      stale.push(dateStr);
+      log(`${dateStr} archived record inconsistent; refreshing...`);
+    }
+  }
+
+  const collection = await runCollection(
+    [...missing, ...stale],
+    triggerType,
+    deps,
+    { requestedCount: dates.length }
+  );
+
+  // Ground-truth recount straight from the database: anything without a valid
+  // row now is still missing, whatever happened above.
+  const afterRows = service.getDailyRecords({ from: start, to: end });
+  const afterByDate = new Map(afterRows.map((r) => [r.generation_date, r]));
+  let remainingMissing = 0;
+  for (const dateStr of dates) {
+    if (!isArchivedRecordValid(afterByDate.get(dateStr))) remainingMissing++;
+  }
+
+  log("Summary:");
+  log(`  range=${start}..${end}`);
+  log(`  checked=${dates.length}`);
+  log(`  already_valid=${alreadyValid}`);
+  log(`  inserted=${collection.inserted}`);
+  log(`  refreshed=${collection.updated}`);
+  log(`  failed=${collection.failures.length}`);
+  log(`  remaining_missing=${remainingMissing}`);
+
+  if (remainingMissing > 0) {
+    log("Unarchived dates will be retried automatically on the next run.");
+  }
+
+  return {
+    ...collection,
+    range: { start, end },
+    checked: dates.length,
+    alreadyValid,
+    remainingMissing,
+  };
+}
+
+async function runCollection(dates, triggerType, deps = {}, opts = {}) {
   const service = deps.archiveService || archiveService;
   const runId = service.startRun(triggerType);
+  const requestedCount = opts.requestedCount ?? dates.length;
 
   let stored = 0;
   let inserted = 0;
@@ -357,6 +534,7 @@ async function runCollection(dates, triggerType, deps = {}) {
     } catch (err) {
       failures.push({ date: dateStr, error: err.message });
       log(`ERROR ${dateStr}: ${err.message}`);
+      log(`Leaving ${dateStr} unarchived; it will be retried on the next run.`);
     }
   }
 
@@ -369,7 +547,7 @@ async function runCollection(dates, triggerType, deps = {}) {
 
   service.finishRun(runId, {
     status,
-    datesRequested: dates.length,
+    datesRequested: requestedCount,
     datesStored: stored,
     error: failures.length ? JSON.stringify(failures) : null,
   });
@@ -377,7 +555,7 @@ async function runCollection(dates, triggerType, deps = {}) {
   const coverage = service.getCoverage();
   log("Collection completed.");
   log(
-    `Summary: requested=${dates.length} stored=${stored} (new=${inserted} refreshed=${updated} unchanged=${unchanged}) failed=${failures.length}`
+    `Summary: requested=${requestedCount} stored=${stored} (new=${inserted} refreshed=${updated} unchanged=${unchanged}) failed=${failures.length}`
   );
   log(
     `Coverage: ${coverage.earliest ?? "-"} .. ${coverage.latest ?? "-"} (${coverage.daysArchived} days)`
@@ -392,5 +570,9 @@ module.exports = {
   collectDate,
   enumerateDates,
   runCollection,
+  runGapAwareCollection,
+  computeGapScanRange,
+  isArchivedRecordValid,
+  previousCompletedIstDay,
   COLLECTOR_SESSION_KEY,
 };

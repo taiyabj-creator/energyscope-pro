@@ -86,41 +86,43 @@ function WeatherPage() {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-900 p-6 shadow-xl">
+      <div className="overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-sky-100/80 via-background to-muted/60 shadow-xl dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-sm font-medium uppercase tracking-[0.3em] text-slate-400">
+            <p className="text-sm font-medium uppercase tracking-[0.3em] text-muted-foreground">
               Live weather
             </p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">
+            <h1 className="mt-2 text-3xl font-semibold text-foreground dark:text-white">
               {plant?.location ?? "Plant weather"}
             </h1>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-muted-foreground">
               Data is fetched independently from Open-Meteo using the plant coordinates from the
               backend and refreshed every 15 minutes.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 backdrop-blur">
+          <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-4 backdrop-blur dark:border-white/10 dark:bg-white/5">
             {weather.isLoading ? (
               <Skeleton className="h-24 w-56" />
             ) : weather.isError || !current ? (
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-white">Weather service unavailable</p>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm font-semibold text-foreground dark:text-white">
+                  Weather service unavailable
+                </p>
+                <p className="text-sm text-muted-foreground">
                   Live conditions are temporarily unavailable.
                 </p>
               </div>
             ) : (
               <div className="flex items-center gap-4">
-                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-300">
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-500 dark:bg-amber-400/10 p-3 text-amber-600 dark:text-amber-300">
                   {weatherIcon}
                 </div>
                 <div>
-                  <p className="text-3xl font-semibold text-white">
+                  <p className="text-3xl font-semibold text-foreground dark:text-white">
                     {current.temperatureC.toFixed(1)}°C
                   </p>
-                  <p className="text-sm text-slate-400">{current.condition}</p>
+                  <p className="text-sm text-muted-foreground">{current.condition}</p>
                 </div>
               </div>
             )}
@@ -169,57 +171,61 @@ function WeatherPage() {
           ) : (
             <div className="flex flex-col gap-6 md:flex-row md:items-center">
               <div className="flex flex-col items-center justify-center rounded-3xl border border-border/50 bg-muted/20 p-8 text-center md:w-48">
-                <p className="text-sm font-medium text-slate-400 uppercase tracking-widest">
+                <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
                   Condition
                 </p>
                 <p
                   className={cn(
                     "mt-2 text-2xl font-bold",
-                    productionForecast.quality === "Excellent" && "text-emerald-400",
-                    productionForecast.quality === "Very Good" && "text-emerald-400/80",
-                    productionForecast.quality === "Good" && "text-amber-400",
-                    productionForecast.quality === "Fair" && "text-orange-400",
-                    productionForecast.quality === "Poor" && "text-rose-400",
+                    productionForecast.quality === "Excellent" &&
+                      "text-emerald-600 dark:text-emerald-400",
+                    productionForecast.quality === "Very Good" &&
+                      "text-emerald-600 dark:text-emerald-400/80",
+                    productionForecast.quality === "Good" && "text-amber-600 dark:text-amber-400",
+                    productionForecast.quality === "Fair" && "text-orange-600 dark:text-orange-400",
+                    productionForecast.quality === "Poor" && "text-rose-600 dark:text-rose-400",
                   )}
                 >
                   {productionForecast.quality}
                 </p>
-                <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-muted dark:bg-slate-800">
                   <div
                     className={cn(
                       "h-full transition-all duration-1000",
-                      productionForecast.quality === "Excellent" && "bg-emerald-400",
-                      productionForecast.quality === "Very Good" && "bg-emerald-400/80",
-                      productionForecast.quality === "Good" && "bg-amber-400",
-                      productionForecast.quality === "Fair" && "bg-orange-400",
-                      productionForecast.quality === "Poor" && "bg-rose-400",
+                      productionForecast.quality === "Excellent" &&
+                        "bg-emerald-500 dark:bg-emerald-400",
+                      productionForecast.quality === "Very Good" &&
+                        "bg-emerald-500 dark:bg-emerald-400/80",
+                      productionForecast.quality === "Good" && "bg-amber-500 dark:bg-amber-400",
+                      productionForecast.quality === "Fair" && "bg-orange-500 dark:bg-orange-400",
+                      productionForecast.quality === "Poor" && "bg-rose-500 dark:bg-rose-400",
                     )}
                     style={{ width: `${productionForecast.confidence}%` }}
                   />
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-muted-foreground">
                   Confidence: {productionForecast.confidence}%
                 </p>
               </div>
               <div className="flex-1 space-y-4">
                 <div>
-                  <h4 className="font-semibold text-white">Reasoning</h4>
-                  <p className="mt-1 text-sm text-slate-400">{productionForecast.reason}</p>
+                  <h4 className="font-semibold text-foreground dark:text-white">Reasoning</h4>
+                  <p className="mt-1 text-sm text-muted-foreground">{productionForecast.reason}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-2xl border border-border/50 bg-background/50 p-3">
-                    <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                  <div className="rounded-2xl border border-border/50 bg-muted/30 dark:bg-background/50 p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
                       Cloud Cover
                     </p>
-                    <p className="mt-1 text-lg font-semibold text-white">
+                    <p className="mt-1 text-lg font-semibold text-foreground dark:text-white">
                       {current?.cloudCoverPct}%
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-border/50 bg-background/50 p-3">
-                    <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                  <div className="rounded-2xl border border-border/50 bg-muted/30 dark:bg-background/50 p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
                       UV Index
                     </p>
-                    <p className="mt-1 text-lg font-semibold text-white">
+                    <p className="mt-1 text-lg font-semibold text-foreground dark:text-white">
                       {current?.uvIndex.toFixed(1)}
                     </p>
                   </div>
@@ -235,11 +241,11 @@ function WeatherPage() {
             <Skeleton className="h-40 w-full" />
           ) : weatherAlerts.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 py-10 text-center">
-              <div className="rounded-full bg-emerald-400/10 p-3 text-emerald-400">
+              <div className="rounded-full bg-emerald-500 dark:bg-emerald-400/10 p-3 text-emerald-600 dark:text-emerald-400">
                 <Zap className="size-6" />
               </div>
-              <p className="text-sm font-medium text-slate-300">No weather alerts.</p>
-              <p className="text-xs text-slate-500">Operating conditions are normal.</p>
+              <p className="text-sm font-medium text-foreground">No weather alerts.</p>
+              <p className="text-xs text-muted-foreground">Operating conditions are normal.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -250,8 +256,10 @@ function WeatherPage() {
                 >
                   <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-500" />
                   <div>
-                    <p className="font-semibold text-rose-200">{alert.title}</p>
-                    <p className="mt-1 text-xs text-rose-300/70">{alert.description}</p>
+                    <p className="font-semibold text-rose-700 dark:text-rose-200">{alert.title}</p>
+                    <p className="mt-1 text-xs text-rose-700/80 dark:text-rose-300/70">
+                      {alert.description}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -275,14 +283,18 @@ function WeatherPage() {
               {timeline.map((item) => (
                 <div
                   key={item.period}
-                  className="flex flex-col items-center rounded-2xl border border-border/70 bg-background/70 p-4 text-center"
+                  className="flex flex-col items-center rounded-2xl border border-border/70 bg-card dark:bg-background/70 p-4 text-center"
                 >
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                     {item.period}
                   </p>
-                  <div className="my-4 text-amber-300">{getWeatherIcon(item.weatherCode)}</div>
-                  <p className="text-sm font-medium text-white">{item.condition}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.temp}°C</p>
+                  <div className="my-4 text-amber-600 dark:text-amber-300">
+                    {getWeatherIcon(item.weatherCode)}
+                  </div>
+                  <p className="text-sm font-medium text-foreground dark:text-white">
+                    {item.condition}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.temp}°C</p>
                 </div>
               ))}
             </div>
@@ -303,32 +315,40 @@ function WeatherPage() {
                     className={cn(
                       "rounded-full p-2",
                       solarImpact.impactType === "negative"
-                        ? "bg-rose-500/10 text-rose-400"
-                        : "bg-emerald-500/10 text-emerald-400",
+                        ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                        : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                     )}
                   >
                     <Info className="size-5" />
                   </div>
-                  <p className="font-medium text-white">{solarImpact.title}</p>
+                  <p className="font-medium text-foreground dark:text-white">{solarImpact.title}</p>
                 </div>
-                <p className="mt-3 text-sm text-slate-400">{solarImpact.description}</p>
+                <p className="mt-3 text-sm text-muted-foreground">{solarImpact.description}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <p className="text-xs text-slate-500 uppercase font-medium">Efficiency Loss</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">
+                    Efficiency Loss
+                  </p>
                   <p
                     className={cn(
                       "text-xl font-bold",
-                      solarImpact.efficiencyLoss > 0 ? "text-rose-400" : "text-emerald-400",
+                      solarImpact.efficiencyLoss > 0
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-emerald-600 dark:text-emerald-400",
                     )}
                   >
                     {solarImpact.efficiencyLoss > 0 ? `-${solarImpact.efficiencyLoss}%` : "Minimal"}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs text-slate-500 uppercase font-medium">Impact Level</p>
-                  <p className="text-xl font-bold text-white capitalize">{solarImpact.level}</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">
+                    Impact Level
+                  </p>
+                  <p className="text-xl font-bold text-foreground dark:text-white capitalize">
+                    {solarImpact.level}
+                  </p>
                 </div>
               </div>
             </div>
@@ -348,20 +368,20 @@ function WeatherPage() {
               {hourly.map((hour) => (
                 <div
                   key={hour.time}
-                  className="min-w-[110px] shrink-0 rounded-2xl border border-border/70 bg-background/70 p-3 text-center"
+                  className="min-w-[110px] shrink-0 rounded-2xl border border-border/70 bg-card dark:bg-background/70 p-3 text-center"
                 >
-                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
                     {formatHour(hour.time)}
                   </p>
-                  <div className="mt-3 flex justify-center text-amber-300">
+                  <div className="mt-3 flex justify-center text-amber-600 dark:text-amber-300">
                     {getWeatherIcon(hour.weatherCode)}
                   </div>
-                  <p className="mt-3 text-sm font-semibold text-white">
+                  <p className="mt-3 text-sm font-semibold text-foreground dark:text-white">
                     {hour.temperatureC.toFixed(1)}°
                   </p>
                   <div className="mt-1 flex items-center justify-center gap-1">
-                    <Droplets className="size-3 text-blue-400" />
-                    <p className="text-[10px] font-medium text-slate-400">
+                    <Droplets className="size-3 text-blue-600 dark:text-blue-400" />
+                    <p className="text-[10px] font-medium text-muted-foreground">
                       {hour.rainProbabilityPct}%
                     </p>
                   </div>
@@ -465,12 +485,12 @@ function WeatherPage() {
 
 function DaylightMetric({ label, value, icon: Icon }: { label: string; value: string; icon: any }) {
   return (
-    <div className="rounded-2xl border border-border/50 bg-background/50 p-4">
-      <div className="flex items-center gap-2 text-slate-500 mb-1">
+    <div className="rounded-2xl border border-border/50 bg-muted/30 dark:bg-background/50 p-4">
+      <div className="flex items-center gap-2 text-muted-foreground mb-1">
         <Icon className="size-3.5" />
         <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-base font-semibold text-white">{value}</p>
+      <p className="text-base font-semibold text-foreground dark:text-white">{value}</p>
     </div>
   );
 }
@@ -507,17 +527,17 @@ function WeatherStatCard({
   return (
     <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-300">{title}</p>
-        <div className="rounded-full bg-slate-800 p-2 text-slate-200">
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        <div className="rounded-full bg-muted dark:bg-slate-800 p-2 text-foreground dark:text-slate-200">
           <Icon className="size-4" />
         </div>
       </div>
       {loading ? (
         <Skeleton className="mt-4 h-8 w-24" />
       ) : (
-        <p className="mt-4 text-lg font-semibold text-white">{value}</p>
+        <p className="mt-4 text-lg font-semibold text-foreground dark:text-white">{value}</p>
       )}
-      <p className="mt-2 text-xs text-slate-400">{footnote}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{footnote}</p>
     </div>
   );
 }

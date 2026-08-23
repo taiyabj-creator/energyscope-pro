@@ -3,27 +3,40 @@
  * Standalone solar-generation archive collector.
  *
  * Usage:
- *   node scripts/archive-collector.js                       -> collect the previous completed Asia/Kolkata calendar day
- *   node scripts/archive-collector.js --date 2026-08-21     -> collect one specific day
+ *   node scripts/archive-collector.js                       -> GAP-AWARE SCAN: verify every day in
+ *                                                              the required range, collect only what is
+ *                                                              missing/inconsistent, then exit
+ *   node scripts/archive-collector.js --date 2026-08-21     -> collect one specific day (no verification pass)
  *   node scripts/archive-collector.js --from 2026-08-01 --to 2026-08-22
- *                                                           -> manual backfill range
+ *                                                           -> manual backfill range (collect unconditionally)
+ *
+ * Scheduled-mode range determination:
+ *   end   = previous completed Asia/Kolkata calendar day (never today)
+ *   start = ARCHIVE_START_DATE when configured, otherwise the earliest day
+ *           already present in solar_generation_daily.
  *
  * Designed for PM2:
  *   autorestart: false, cron_restart: "<daily>"
  * The script exits when done; it computes the target day itself in
  * Asia/Kolkata, so host timezone, reboots and duplicate scheduler fires are
- * all safe (the database upsert makes every run idempotent).
+ * all safe (the database upsert makes every run idempotent). Dates that fail
+ * because of a temporary upstream outage stay missing and are retried
+ * automatically by the next scheduled scan.
  *
  * Required environment (backend/.env):
  *   UTL_COLLECTOR_EMAIL / UTL_COLLECTOR_PASSWORD - UTL portal credentials
  *   ARCHIVE_PLANT_ID                              - defaults to 105717
+ *   ARCHIVE_START_DATE                            - optional; earliest day that should be archived
  */
 
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const archiveService = require("../services/archiveService");
-const { runCollection, enumerateDates } = require("../services/archiveCollector");
+const {
+  runCollection,
+  runGapAwareCollection,
+} = require("../services/archiveCollector");
 
 function parseArgs(argv) {
   const args = {};
@@ -45,13 +58,6 @@ function isValidIsoDate(s) {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
 
-/** Yesterday's Asia/Kolkata calendar date, computed without host-TZ trust. */
-function previousCompletedIstDay() {
-  const today = archiveService.istDateString(new Date());
-  const cursor = Date.parse(`${today}T00:00:00Z`) - 24 * 60 * 60 * 1000;
-  return new Date(cursor).toISOString().slice(0, 10);
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -63,6 +69,7 @@ async function main() {
   }
 
   let dates;
+  let triggerType;
 
   if (args.date) {
     if (!isValidIsoDate(args.date)) {
@@ -70,23 +77,29 @@ async function main() {
       process.exit(2);
     }
     dates = [args.date];
+    triggerType = "manual-date";
   } else if (args.from || args.to) {
     if (!isValidIsoDate(args.from) || !isValidIsoDate(args.to) || args.from > args.to) {
       console.log("[ARCHIVE] ERROR --from/--to must be valid YYYY-MM-DD with from <= to.");
       process.exit(2);
     }
-    dates = enumerateDates(args.from, args.to);
-  } else {
-    dates = [previousCompletedIstDay()];
+    dates = require("../services/archiveCollector").enumerateDates(args.from, args.to);
+    triggerType = `backfill-${dates.length}d`;
   }
 
-  const triggerType =
-    dates.length === 1 ? "manual-date" : `backfill-${dates.length}d`;
-
   try {
-    const result = await runCollection(dates, triggerType);
-    // All requested dates failed -> non-zero exit so PM2/logs show it.
-    process.exit(result.stored === 0 && result.failures.length > 0 ? 1 : 0);
+    if (dates) {
+      // Manual single-date / explicit-range mode: unchanged behaviour.
+      const result = await runCollection(dates, triggerType);
+      // All requested dates failed -> non-zero exit so PM2/logs show it.
+      process.exit(result.stored === 0 && result.failures.length > 0 ? 1 : 0);
+    } else {
+      // Scheduled mode: gap-aware verify/collect scan over the whole window.
+      const result = await runGapAwareCollection({ triggerType: "gap-scan" });
+      process.exit(
+        result.stored === 0 && result.failures.length > 0 && result.checked > 0 ? 1 : 0
+      );
+    }
   } catch (err) {
     console.log(`[ARCHIVE] FATAL ${err.message}`);
     process.exit(1);

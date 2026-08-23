@@ -39,30 +39,51 @@ function getWebPush(deps = {}) {
 /** Upsert a subscription for an authenticated user. Idempotent per endpoint. */
 function saveSubscription(email, subscription, deps = {}) {
   const store = deps.db || db;
-  if (
-    !subscription ||
-    typeof subscription.endpoint !== "string" ||
-    !subscription.keys?.p256dh ||
-    !subscription.keys?.auth
-  ) {
-    throw new Error("Invalid push subscription payload.");
+  if (!subscription || typeof subscription.endpoint !== "string") {
+    throw new Error("Invalid push subscription payload: endpoint missing.");
   }
+
+  let endpointOrigin = "unknown";
+  try {
+    const parsed = new URL(subscription.endpoint);
+    if (parsed.protocol !== "https:") {
+      throw new Error("non-https endpoint");
+    }
+    endpointOrigin = parsed.origin;
+  } catch (err) {
+    throw new Error("Invalid push subscription payload: endpoint must be a valid HTTPS URL.");
+  }
+
+  if (!subscription.keys?.p256dh || !subscription.keys?.auth) {
+    throw new Error("Invalid push subscription payload: keys.p256dh and keys.auth required.");
+  }
+
+  const expirationTime =
+    Number.isFinite(Number(subscription.expirationTime)) && subscription.expirationTime !== null
+      ? Number(subscription.expirationTime)
+      : null;
+
+  // Safe to log: origin only, never the full capability URL or key material.
+  console.log(`[PUSH] Subscription stored for ${String(email)} (${endpointOrigin}).`);
+
   store
     .prepare(
-      `INSERT INTO push_subscriptions (email, endpoint, p256dh, auth, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO push_subscriptions (email, endpoint, p256dh, auth, expiration_time, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(endpoint) DO UPDATE SET
          email = excluded.email,
          p256dh = excluded.p256dh,
          auth = excluded.auth,
+         expiration_time = excluded.expiration_time,
          updated_at = excluded.updated_at,
          failure_count = 0`
     )
     .run(
       String(email),
       subscription.endpoint,
-      subscription.keys.p256dh,
-      subscription.keys.auth,
+      String(subscription.keys.p256dh),
+      String(subscription.keys.auth),
+      expirationTime,
       Date.now(),
       Date.now()
     );

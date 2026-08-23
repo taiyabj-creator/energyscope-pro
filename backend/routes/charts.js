@@ -11,11 +11,6 @@ async function callChart(req, endpoint, dateParameter = null) {
   
   const session = req.session;
 
-console.log(
-  "Charts token:",
-  session.utlToken.substring(0, 40)
-);
-
 if (!session.utlToken) {
   throw new Error("Authentication token missing.");
 }

@@ -7,7 +7,11 @@ const ThemeContext = createContext<{ theme: Theme; toggle: () => void } | null>(
 const STORAGE_KEY = "utl-solar-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "dark";
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    return stored === "light" || stored === "dark" ? stored : "dark";
+  });
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);

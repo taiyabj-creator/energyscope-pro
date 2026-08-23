@@ -59,4 +59,15 @@ CREATE TABLE IF NOT EXISTS notification_state (
 );
 `);
 
+// Migration: expiration_time (nullable) added after initial rollout. Browsers
+// almost always send null; kept for spec completeness. Guarded so existing
+// databases upgrade in place without touching any other column.
+try {
+  db.exec(`ALTER TABLE push_subscriptions ADD COLUMN expiration_time INTEGER`);
+} catch (err) {
+  if (!String(err?.message || "").includes("duplicate column name")) {
+    throw err;
+  }
+}
+
 module.exports = db;

@@ -1,260 +1,286 @@
-# ☀️ EnergyScope
+# ☀️ EnergyScope Pro
 
-EnergyScope is a modern, mobile-first solar monitoring dashboard for UTL Solar inverter systems.
+EnergyScope Pro is a modern, mobile-first Progressive Web App (PWA) for monitoring UTL Solar inverter systems.
 
-The goal of this project is to build a faster, cleaner, and more feature-rich alternative to the official UTL monitoring application while maintaining compatibility with the official UTL backend API.
+The goal of the project is to build a faster, cleaner, and more feature-rich alternative to the official UTL monitoring application while remaining compatible with the official UTL backend API.
 
 ---
 
 # Features
 
-Current Features
+## Implemented
 
-- Live inverter monitoring
-- Live generation charts
-- Daily, Monthly, Yearly and Total production
-- Responsive dashboard
-- Dark / Light theme
-- Modern UI built with shadcn/ui
-- Mobile-first design
-- React Query data fetching
-- Professional charts using Recharts
+- Live inverter monitoring (plant, devices, logger diagnostics)
+- Live generation charts (daily / monthly / yearly / total)
+- Historical production data with automatic daily archival
+- Weather dashboard
+- Production analytics and performance insights
+- Maintenance history module
+- Data export (PDF / Excel)
+- Authentication with JWT and server-side sessions
+- Responsive dashboard with dark / light theme
+- Modern UI built with shadcn/ui and Radix UI
+- Installable PWA (offline-capable app shell via service worker)
 
-Planned Features
+## In Progress / Planned
 
-- Progressive Web App (PWA)
-- Logger Health dashboard
-- Weather integration
-- Maintenance history
-- Excel export
-- CSV export
-- Push notifications
+- Web push notifications (inverter status alerts, daily production summary)
 - Multi-user support
 - AI-powered analytics
 - Seasonal comparisons
-- Historical uptime analysis
 
 ---
 
 # Technology Stack
 
-## Frontend
+| Layer | Technology |
+| --- | --- |
+| UI | React 19, TypeScript, Tailwind CSS 4, shadcn/ui, Radix UI, Recharts, Framer Motion |
+| App framework | TanStack Start (TanStack Router + TanStack Query) |
+| Server / SSR runtime | Nitro (`node-server` preset), Vite 8 |
+| PWA | vite-plugin-pwa (Workbox service worker, web manifest) |
+| Backend API | Node.js, Express 4 |
+| Database | SQLite (`better-sqlite3`) for sessions, archives, and maintenance data |
+| Process management | PM2 (production) |
 
-- React 19
-- TypeScript
-- Vite
-- Tailwind CSS
-- shadcn/ui
-- Radix UI
-- TanStack Query
-- Recharts
-- Framer Motion
+External services:
 
-Hosting
-
-- Vercel
-
----
-
-## Backend
-
-Current
-
-- Express (temporary)
-
-Final
-
-- FastAPI
-- SQLAlchemy
-- Alembic
-- Pydantic
-- httpx
-
-Hosting
-
-- Render
-
----
-
-## Database
-
-Final Database
-
-- Turso (Cloud SQLite)
+- UTL Solar RMS API — accessed exclusively through the backend
+- Open-Meteo — weather forecasts
 
 ---
 
 # Architecture
 
 ```
-Browser / PWA
+Browser / installed PWA
         │
         ▼
-React Frontend
-        │
+TanStack Start frontend (React 19, served by Nitro)
+        │  same-origin requests to /api/*
         ▼
-FastAPI Backend
-        │
-        ├────────► UTL Solar API
-        ├────────► Weather Provider
-        └────────► Turso Database
+Nitro proxy  ──►  Express backend API
+                        │
+                        ├────────► UTL Solar RMS API
+                        ├────────► SQLite (sessions, archive, maintenance)
+                        └────────► Open-Meteo (server-side weather use)
 ```
 
-The frontend never communicates directly with external providers.
-
-The backend acts as the single source of truth.
+- The frontend is built with Vite + TanStack Start and served by Nitro using the `node-server` preset. The production build is emitted to `.output/`.
+- All solar/inverter data flows through the Express backend, which talks to the UTL Solar API on behalf of authenticated clients. The frontend never communicates directly with the UTL API.
+- The backend is the single source of truth for application data.
+- In development and in production, Nitro proxies same-origin `/api/**` requests to the Express backend (`API_PROXY_TARGET`, default `http://127.0.0.1:3001`), so the browser only ever talks to one origin.
+- Weather forecast data on the weather page is fetched from the public Open-Meteo API.
 
 ---
 
 # Project Structure
 
 ```
-backend/
-    Express backend (temporary)
-
 src/
-    React frontend
+    Application source code.
+    src/api/          Typed API clients for the backend
+    src/routes/       File-based routes (TanStack Router): dashboard,
+                      energy, history, devices, diagnostics, weather,
+                      analytics, maintenance, settings, login, ...
+    src/components/   Reusable UI (cards, charts, dashboard, layout, ui, widgets)
+    src/services/     Client-side services (solar data, weather, push)
+    src/hooks/        Shared React hooks
+    src/context/      React context providers (auth, theme)
+    src/types/        Shared TypeScript types
+    src/utils/        Formatting and helper utilities
+    src/lib/          Internal helpers
+
+backend/
+    Express API server.
+    routes/           REST endpoints (auth, charts, plant, inverter,
+                      archive, export, maintenance, health, ...)
+    services/         Business logic (UTL client, session handling,
+                      archive collector, exports, weather, ...)
+    adapters/         External system adapters
+    middleware/       Auth and other middleware
+    controllers/      Request controllers
+    config/           Plant configuration
+    data/             SQLite databases and database modules (gitignored)
+    scripts/          Standalone scripts (daily archive collector)
+    .env.example      Environment variable template
 
 public/
-    Static assets
+    Static assets and PWA icons.
 
-ARCHITECTURE.md
-    Technical architecture
-
-PROJECT_ROADMAP.md
-    Development roadmap
-
-CONTRIBUTING.md
-    Development guidelines
+vite.config.ts         Vite + TanStack Start + Nitro + PWA configuration
+ecosystem configs      PM2 configuration (see backend/)
+ARCHITECTURE.md        Technical architecture
+PROJECT_ROADMAP.md     Development roadmap
+CONTRIBUTING.md        Development guidelines
+AGENTS.md              AI coding assistant guidelines
 ```
 
 ---
 
 # Development Status
 
-Current Stage
+Current release: **v1.1.0** (active development).
 
-Prototype / Active Development
+The project has moved beyond the prototype stage: the dashboard, live monitoring, historical archiving, exports, maintenance, and weather features are implemented and deployed. See `PROJECT_ROADMAP.md` for the detailed roadmap.
 
-Completed
-
-- Reverse engineered UTL authentication
-- Reverse engineered Plant Status endpoint
-- Reverse engineered InverterDevice endpoint
-- Reverse engineered generation chart endpoints
-- Live backend prototype
-- Responsive dashboard
-- Live chart integration
-
-In Progress
-
-- Replace remaining mock data
-- Backend migration to FastAPI
-- Turso integration
-
-Upcoming
-
-- PWA
-- Logger Health
-- Weather
-- Maintenance module
-- Export system
-- Deployment
+Items listed under "In Progress / Planned" above are not complete and should not be considered stable.
 
 ---
 
 # Running the Project
 
-## Frontend
+Prerequisites: Node.js (18+) and npm. Instructions below are for Linux/Ubuntu.
 
-Install dependencies
+## 1. Clone and install
 
 ```bash
+git clone https://github.com/taiyabj-creator/energyscope-pro.git
+cd energyscope-pro
 npm install
 ```
 
-Run
-
-```bash
-npm run dev
-```
-
----
-
-## Backend
+## 2. Configure the backend
 
 ```bash
 cd backend
+cp .env.example .env
+# Edit backend/.env and fill in real values (never commit this file)
 npm install
-npm run dev
 ```
+
+Available backend scripts:
+
+```bash
+npm run dev      # start with nodemon (auto-reload)
+npm start        # start without auto-reload
+```
+
+By default the backend listens on port `3001` (see `PORT` in `.env.example`).
+
+## 3. Run the frontend
+
+From the repository root:
+
+```bash
+npm run dev      # Vite dev server (TanStack Start + Nitro)
+```
+
+Available root scripts:
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build (outputs to `.output/`) |
+| `npm run preview` | Preview a production build locally |
+| `npm run lint` | Run ESLint |
+| `npm run format` | Format code with Prettier |
+
+During development, Nitro proxies `/api/**` to the backend target defined by `API_PROXY_TARGET` (default `http://127.0.0.1:3001`), so the backend must be running for data-driven pages to work.
+
+---
+
+# Production / Deployment
+
+EnergyScope Pro is hosted on **Oracle Cloud Infrastructure (OCI)**.
+
+Production architecture, as configured in this repository:
+
+- The web application is built with `vite build` into `.output/` and served as a Node.js application by Nitro's `node-server` preset (`node .output/server/index.mjs`).
+- The Nitro layer proxies `/api/**` requests to the Express backend process running on the same host.
+- PM2 manages backend processes, including the scheduled daily archive collector (`backend/ecosystem.archive.config.js`), which runs once per day via `cron_restart` to archive the previous day's production data.
+
+Example (on the server):
+
+```bash
+pm2 start ecosystem.archive.config.js
+pm2 save
+```
+
+Notes:
+
+- The application is served over HTTPS through a custom domain name. The domain itself is infrastructure configuration and is intentionally not documented here.
+- Server addresses, SSH access, reverse-proxy details, and credentials are private infrastructure information and are deliberately excluded from this repository's documentation.
 
 ---
 
 # Environment Variables
 
-Do NOT commit:
+Environment variable **names** used by the project. Never commit real values.
 
-- .env
-- token.txt
-- API keys
-- Passwords
+Frontend / build-time (Vite):
 
-All credentials must be stored using environment variables.
+| Variable | Purpose |
+| --- | --- |
+| `VITE_API_BASE_URL` | Base URL for backend API calls from the client (defaults to `/api`) |
+| `VITE_APP_VERSION` | Optional version label shown on the diagnostics page |
+
+Nitro / build-time:
+
+| Variable | Purpose |
+| --- | --- |
+| `API_PROXY_TARGET` | Target the Nitro `/api/**` proxy forwards to (default `http://127.0.0.1:3001`) |
+
+Backend (`backend/.env`, see `backend/.env.example`):
+
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | Port the Express API listens on |
+| `JWT_SECRET` | Secret used to sign authentication tokens |
+| `SESSION_ENCRYPTION_KEY` | Key used to encrypt stored session material |
+| `UTL_COLLECTOR_EMAIL` | UTL portal account used by the headless archive collector |
+| `UTL_COLLECTOR_PASSWORD` | Password for the archive collector account |
+| `ARCHIVE_PLANT_ID` | Plant ID to archive |
+| `ARCHIVE_DB_PATH` | Optional override of the SQLite archive file location |
+
+**Warning:** never commit `.env` files, tokens, passwords, or API keys. `.env` files are gitignored by design; keep it that way. Store secrets only in environment files or your hosting provider's secret management.
 
 ---
 
 # Documentation
 
-Read these files before contributing:
+Read these before contributing:
 
-- ARCHITECTURE.md
-- PROJECT_ROADMAP.md
-- CONTRIBUTING.md
-
-These documents define the project's architecture, roadmap, and coding standards.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — technical architecture
+- [PROJECT_ROADMAP.md](PROJECT_ROADMAP.md) — development roadmap
+- [CONTRIBUTING.md](CONTRIBUTING.md) — coding standards and workflow
+- [AGENTS.md](AGENTS.md) — guidelines for AI coding assistants
 
 ---
 
 # Project Goals
 
-EnergyScope is designed to be:
+EnergyScope Pro is designed to be:
 
-- Modern
+- Modern and fast
 - Mobile-first
 - Installable as a Progressive Web App
 - Secure
-- Easy to maintain
-- Scalable
-- Free to host
-- Better than the official UTL dashboard
+- Easy to maintain and extend
+- A better experience than the official UTL monitoring dashboard
 
 ---
 
 # Disclaimer
 
-EnergyScope is an independent project developed for educational and personal use.
+EnergyScope Pro is an independent project developed for educational and personal use.
 
 It is not affiliated with, endorsed by, or sponsored by UTL Solar or any related company.
 
-Users are responsible for complying with the terms of service and applicable laws when interacting with third-party services.
+Users are responsible for complying with the terms of service of third-party services and with applicable laws when interacting with them.
+
+No guarantees are made regarding accuracy of monitored data, system performance, or availability.
 
 ---
 
 # License
 
-This project is currently under active development.
-
-A license will be selected before the first public release.
+This project is under active development. A license will be selected before wider distribution.
 
 ---
 
 # Version
 
-Current Version
+Current version: **v1.1.0**
 
-v0.1.0 (Development)
-
-Status
-
-🚧 Work in Progress
+Status: actively developed.

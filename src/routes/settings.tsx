@@ -10,11 +10,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
 import {
   disablePushNotifications,
-  enablePushNotifications,
   fetchNotificationStatus,
   getExistingSubscription,
   getPushSupport,
+  requestPushPermission,
+  ensurePushSubscription,
+  type EnableResult,
 } from "@/services/pushService";
+import { resolvePushUiState } from "@/services/pushUiState";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -29,6 +32,22 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
+const PERMISSION_LABELS: Record<string, string> = {
+  "permission-denied": "Chrome is blocking notification permission for this site.",
+  "permission-dismissed": "The permission prompt was dismissed. Tap again to allow.",
+  "sw-unavailable": "The app's service worker is not ready yet. Reload the page and try again.",
+  "vapid-key-fetch-failed": "Could not reach the server to start the subscription.",
+  "vapid-key-invalid": "The server returned an invalid push key. Contact support.",
+  "subscribe-failed": "The browser refused the push subscription.",
+  "backend-error": "The server could not store the subscription. Try again shortly.",
+  unsupported: "This device or browser does not support web push.",
+  "insecure-context": "A secure (HTTPS) connection is required for notifications.",
+};
+
+function enableFailureMessage(result: Exclude<EnableResult, { ok: true }>): string {
+  return PERMISSION_LABELS[result.reason] ?? result.detail ?? "Notifications could not be enabled.";
+}
+
 function SettingsPage() {
   const { theme, toggle } = useTheme();
   const { data: plant } = usePlantInfo();
@@ -41,6 +60,7 @@ function SettingsPage() {
 
   const pushSupport = getPushSupport();
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
   const [pushState, setPushState] = useState<{
     subscribedOnServer: number | null;
     hasLocalSubscription: boolean;
@@ -63,25 +83,47 @@ function SettingsPage() {
     };
   }, []);
 
-  async function enableNotifications() {
-    if (!pushSupport.supported) return;
-
-    if (pushSupport.permission !== "granted") {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
+  async function refreshPushState() {
+    const local = await getExistingSubscription();
+    let server: number | null = null;
+    try {
+      server = (await fetchNotificationStatus()).subscribed;
+    } catch {
+      server = null;
     }
+    setPushState({ subscribedOnServer: server, hasLocalSubscription: !!local });
+  }
 
+  async function enableNotifications() {
+    if (!pushSupport.supported || pushBusy) return;
+    setPushError(null);
     setPushBusy(true);
     try {
-      await enablePushNotifications();
-      const local = await getExistingSubscription();
-      let server: number | null = null;
-      try {
-        server = (await fetchNotificationStatus()).subscribed;
-      } catch {
-        server = null;
+      // Ask ONCE, directly inside this tap handler (Android Chrome requires
+      // the prompt to be a consequence of the user gesture). Never re-prompt
+      // when Chrome already reports "denied".
+      if (notificationPermission !== "granted") {
+        const permission = await requestPushPermission();
+        setNotificationPermission(
+          permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default",
+        );
+        if (permission === "denied") {
+          setPushError(PERMISSION_LABELS["permission-denied"] ?? null);
+          return;
+        }
+        if (permission === "dismissed") {
+          setPushError(PERMISSION_LABELS["permission-dismissed"] ?? null);
+          return;
+        }
       }
-      setPushState({ subscribedOnServer: server, hasLocalSubscription: !!local });
+
+      const result = await ensurePushSubscription();
+      if (!result.ok) {
+        setPushError(enableFailureMessage(result));
+        return;
+      }
+
+      await refreshPushState();
     } finally {
       setPushBusy(false);
     }
@@ -152,56 +194,59 @@ function SettingsPage() {
           </span>
 
           <div className="flex-1">
-            <p className="text-sm font-medium">Browser Notifications</p>
+            {(() => {
+              const ui = resolvePushUiState({
+                supported: pushSupport.supported,
+                secureContext: pushSupport.secureContext,
+                permission: notificationPermission,
+                hasLocalSubscription: pushState.hasLocalSubscription,
+                serverCount: pushState.subscribedOnServer,
+              });
+              return (
+                <>
+                  <p className="text-sm font-medium">Browser Notifications</p>
 
-            <p className="mt-1 text-xs text-muted-foreground">
-              {!pushSupport.supported
-                ? "Status: Not supported on this device"
-                : pushState.hasLocalSubscription && notificationPermission === "granted"
-                  ? `Enabled · ${pushState.subscribedOnServer ?? "…"} device(s) registered`
-                  : notificationPermission === "denied"
-                    ? "Blocked"
-                    : "Not enabled"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Inverter online/offline alerts and the daily production summary are delivered even
-              when the app is closed.
-            </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{ui.title}</p>
+                  {ui.hint && (
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{ui.hint}</p>
+                  )}
+                  {ui.instructions && (
+                    <p className="mt-1 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                      {ui.instructions}
+                    </p>
+                  )}
+                  {pushError && (
+                    <p
+                      role="status"
+                      className="mt-1 text-xs leading-relaxed text-red-500 dark:text-red-400"
+                    >
+                      {pushError}
+                    </p>
+                  )}
 
-            {pushSupport.supported && notificationPermission !== "granted" && (
-              <button
-                type="button"
-                onClick={enableNotifications}
-                disabled={pushBusy}
-                className="mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium transition hover:bg-muted/50 disabled:opacity-50"
-              >
-                Enable Notifications
-              </button>
-            )}
-            {pushSupport.supported &&
-              notificationPermission === "granted" &&
-              (!pushState.hasLocalSubscription || (pushState.subscribedOnServer ?? 0) === 0) && (
-                <button
-                  type="button"
-                  onClick={enableNotifications}
-                  disabled={pushBusy}
-                  className="mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium transition hover:bg-muted/50 disabled:opacity-50"
-                >
-                  Re-enable Push
-                </button>
-              )}
-            {pushSupport.supported &&
-              notificationPermission === "granted" &&
-              pushState.hasLocalSubscription && (
-                <button
-                  type="button"
-                  onClick={disableNotifications}
-                  disabled={pushBusy}
-                  className="ml-2 mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
-                >
-                  Disable
-                </button>
-              )}
+                  {ui.showEnable && (
+                    <button
+                      type="button"
+                      onClick={enableNotifications}
+                      disabled={pushBusy}
+                      className="mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium transition hover:bg-muted/50 disabled:opacity-50"
+                    >
+                      Enable Notifications
+                    </button>
+                  )}
+                  {ui.showDisable && (
+                    <button
+                      type="button"
+                      onClick={disableNotifications}
+                      disabled={pushBusy}
+                      className="mt-3 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
+                    >
+                      Disable Notifications
+                    </button>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       </Panel>

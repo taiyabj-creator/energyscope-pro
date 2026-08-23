@@ -19,7 +19,6 @@ import { Chip, StatusDot } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
 
-
 function useClock() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -80,7 +79,13 @@ export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar:
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <div className="hidden text-right lg:block">
             <p className="num text-sm font-semibold">
-              {now ? now.toLocaleTimeString("en-GB", { hour12: false }) : "--:--:--"}
+              {now
+                ? now.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })
+                : "--:--"}
             </p>
             <p className="text-[11px] text-muted-foreground">
               {now
@@ -138,39 +143,36 @@ export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar:
                   className="panel-solid absolute right-0 top-12 z-40 w-[min(92vw,22rem)] overflow-hidden p-0"
                 >
                   <p className="border-b border-border/60 px-4 py-3 text-sm font-semibold">
-  Notifications
-</p>
+                    Notifications
+                  </p>
 
-<ul className="scroll-slim max-h-80 divide-y divide-border/60 overflow-y-auto">
-  {alerts.length === 0 ? (
-    <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-      No active alerts 🎉
-    </li>
-  ) : (
-    alerts.map((n) => (
-      <li key={n.id} className="flex gap-3 px-4 py-3">
-        <span
-          className={cn(
-            "mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg",
-            n.severity === "error"
-              ? "bg-destructive/12 text-destructive"
-              : "bg-warning/12 text-warning"
-          )}
-        >
-          <AlertTriangle className="size-3.5" />
-        </span>
+                  <ul className="scroll-slim max-h-80 divide-y divide-border/60 overflow-y-auto">
+                    {alerts.length === 0 ? (
+                      <li className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        No active alerts 🎉
+                      </li>
+                    ) : (
+                      alerts.map((n) => (
+                        <li key={n.id} className="flex gap-3 px-4 py-3">
+                          <span
+                            className={cn(
+                              "mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg",
+                              n.severity === "error"
+                                ? "bg-destructive/12 text-destructive"
+                                : "bg-warning/12 text-warning",
+                            )}
+                          >
+                            <AlertTriangle className="size-3.5" />
+                          </span>
 
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium">{n.title}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {n.description}
-          </p>
-        </div>
-      </li>
-    ))
-  )}
-</ul>
-
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-medium">{n.title}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{n.description}</p>
+                          </div>
+                        </li>
+                      ))
+                    )}
+                  </ul>
                 </motion.div>
               )}
             </AnimatePresence>
