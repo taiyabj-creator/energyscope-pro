@@ -3,9 +3,12 @@
  * Standalone solar-generation archive collector.
  *
  * Usage:
- *   node scripts/archive-collector.js                       -> GAP-AWARE SCAN: verify every day in
- *                                                              the required range, collect only what is
- *                                                              missing/inconsistent, then exit
+ *   node scripts/archive-collector.js                       -> GAP-AWARE SCAN: reconcile every stored day
+ *                                                              against UTL's authoritative day-row scalars,
+ *                                                              then verify/collect what is missing or
+ *                                                              inconsistent, then exit
+ *   node scripts/archive-collector.js --repair-history      -> canonical reconciliation ONLY (fast repair of
+ *                                                              historical values; no per-day collection)
  *   node scripts/archive-collector.js --date 2026-08-21     -> collect one specific day (no verification pass)
  *   node scripts/archive-collector.js --from 2026-08-01 --to 2026-08-22
  *                                                           -> manual backfill range (collect unconditionally)
@@ -33,10 +36,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const archiveService = require("../services/archiveService");
-const {
-  runCollection,
-  runGapAwareCollection,
-} = require("../services/archiveCollector");
+const { runCollection, runGapAwareCollection } = require("../services/archiveCollector");
 
 function parseArgs(argv) {
   const args = {};
@@ -45,6 +45,7 @@ function parseArgs(argv) {
     if (a === "--date") args.date = argv[++i];
     else if (a === "--from") args.from = argv[++i];
     else if (a === "--to") args.to = argv[++i];
+    else if (a === "--repair-history") args.repairHistory = true;
     else if (a === "--help" || a === "-h") args.help = true;
   }
   return args;
@@ -63,13 +64,34 @@ async function main() {
 
   if (args.help) {
     console.log(
-      "Usage: node scripts/archive-collector.js [--date YYYY-MM-DD | --from YYYY-MM-DD --to YYYY-MM-DD]"
+      "Usage: node scripts/archive-collector.js [--date YYYY-MM-DD | --from YYYY-MM-DD --to YYYY-MM-DD]",
     );
     process.exit(0);
   }
 
   let dates;
   let triggerType;
+
+  if (args.repairHistory) {
+    // Operator-triggered instant repair: reconcile stored rows against UTL's
+    // authoritative scalars over the full required window, then exit.
+    const {
+      computeGapScanRange,
+      reconcileCanonicalValues,
+    } = require("../services/archiveCollector");
+    const { start, end } = computeGapScanRange();
+    if (!start || start > end) {
+      console.log(`[ARCHIVE] Nothing to repair (range=${start ?? "-"}..${end}).`);
+      process.exit(0);
+    }
+    try {
+      const summary = await reconcileCanonicalValues({ from: start, to: end });
+      process.exit(summary.corrected + summary.relabeled === 0 ? 0 : 0);
+    } catch (err) {
+      console.log(`[ARCHIVE] FATAL repair failed: ${err.message}`);
+      process.exit(1);
+    }
+  }
 
   if (args.date) {
     if (!isValidIsoDate(args.date)) {
@@ -96,9 +118,7 @@ async function main() {
     } else {
       // Scheduled mode: gap-aware verify/collect scan over the whole window.
       const result = await runGapAwareCollection({ triggerType: "gap-scan" });
-      process.exit(
-        result.stored === 0 && result.failures.length > 0 && result.checked > 0 ? 1 : 0
-      );
+      process.exit(result.stored === 0 && result.failures.length > 0 && result.checked > 0 ? 1 : 0);
     }
   } catch (err) {
     console.log(`[ARCHIVE] FATAL ${err.message}`);

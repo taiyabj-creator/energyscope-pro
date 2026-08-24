@@ -37,13 +37,20 @@
  * that cap so a missing stretch cannot fabricate energy.
  *
  * CANONICAL VALUE POLICY: the charts/monthly day-row scalar is UTL's own
- * statement of how much energy a day produced and is therefore authoritative.
+ * statement of how much energy a day produced and therefore authoritative.
  * Whenever it exists it is stored verbatim as generation_kwh
  * (source charts/monthly_row); the integrated W-curve value is kept only as
  * a diagnostic cross-check (points_count + check_ratio = integrated/canonical).
  * Integration becomes the archived value ONLY when UTL publishes no scalar
  * for the date (source charts/daily_integrated). Provenance lives in the
  * raw_unit/source columns forever.
+ *
+ * CANONICAL RECONCILIATION: every scheduled scan first resolves the
+ * authoritative scalars for the whole window (one charts/monthly request per
+ * month) and rewrites any stored row that deviates from them - regardless of
+ * how the row got there (legacy integrated value, missing cross-check,
+ * fallback label). This is what repairs historical rows written before the
+ * canonical policy existed; it is idempotent and never fabricates values.
  * ---------------------------------------------------------------------------
  */
 
@@ -349,6 +356,142 @@ function previousCompletedIstDay(now = new Date()) {
 }
 
 // ---------------------------------------------------------------------------
+// Canonical reconciliation (UTL day-row scalars override stored values)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the authoritative UTL day-row scalar for every date in the list.
+ * One charts/monthly request PER DISTINCT MONTH; a month that fails upstream
+ * marks its dates as unresolved (null) without blocking other months.
+ * Returns Map<'YYYY-MM-DD', number|null> - null means "no scalar available".
+ */
+async function fetchMonthlyScalars(dates, session, deps = {}) {
+  const service = deps.archiveService || archiveService;
+  const byDateScalar = new Map();
+  const months = [...new Set(dates.map((d) => d.slice(0, 7)))].sort();
+
+  for (const month of months) {
+    let rows = null;
+    try {
+      const json = await postChart(
+        session,
+        "monthly",
+        { plant_id: Number(service.PLANT_ID()), date_parameter: month },
+        deps,
+      );
+      rows = Array.isArray(json?.results) ? json.results : [];
+    } catch (err) {
+      log(`WARN Monthly endpoint failed for ${month} during reconcile: ${err.message}`);
+    }
+
+    for (const dateStr of dates.filter((d) => d.slice(0, 7) === month)) {
+      if (!rows) {
+        byDateScalar.set(dateStr, null);
+        continue;
+      }
+      const row = rows.find((r) => Number(r.date) === Number(dateStr.slice(8, 10)));
+      const value =
+        row && Number.isFinite(Number(row.PvProduction)) ? Number(row.PvProduction) : null;
+      byDateScalar.set(dateStr, value !== null && value >= 0 ? value : null);
+    }
+  }
+
+  return byDateScalar;
+}
+
+/**
+ * Rewrites stored daily rows so they match the authoritative UTL scalars:
+ *   - value differs OR provenance is not charts/monthly_row -> rewrite
+ *     verbatim from the scalar, preserving prior diagnostics (points_count,
+ *     integrated-vs-scalar ratio); idempotent via the upsert equality check.
+ *   - no row yet -> counted as missing (the gap-scan collects it).
+ *   - UTL publishes no scalar -> row left untouched (never fabricate).
+ * Safe to run any number of times; repeated runs converge to zero writes.
+ */
+async function reconcileCanonicalValues({ from, to }, deps = {}) {
+  const service = deps.archiveService || archiveService;
+  const plantId = service.PLANT_ID();
+  const dates = enumerateDates(from, to);
+
+  const summary = {
+    checked: dates.length,
+    corrected: 0,
+    relabeled: 0,
+    alreadyCanonical: 0,
+    awaitingCanonical: 0,
+    missing: 0,
+  };
+  if (dates.length === 0) return summary;
+
+  const session = await ensureCollectorSession(deps);
+  const scalars = await fetchMonthlyScalars(dates, session, deps);
+
+  for (const dateStr of dates) {
+    const scalar = scalars.get(dateStr);
+    if (!Number.isFinite(scalar)) {
+      // No authoritative value upstream this round: leave whatever exists.
+      const existing = service
+        .getDailyRecords({ date: dateStr })
+        .find((r) => String(r.plant_id) === String(plantId));
+      if (!existing) summary.missing++;
+      else summary.awaitingCanonical++;
+      continue;
+    }
+
+    const existing = service
+      .getDailyRecords({ date: dateStr })
+      .find((r) => String(r.plant_id) === String(plantId));
+
+    if (!existing) {
+      summary.missing++;
+      continue;
+    }
+
+    const sameValue = Number(existing.generation_kwh) === scalar;
+    if (sameValue && existing.source === "charts/monthly_row") {
+      summary.alreadyCanonical++;
+      continue;
+    }
+
+    // Preserve prior diagnostics. For legacy integrated rows the stored
+    // generation_kwh WAS the integrated kWh, so integrated/scalar is exactly
+    // the historical check_ratio meaning.
+    const priorRatio =
+      existing.check_ratio !== null && existing.check_ratio !== undefined
+        ? Number(existing.check_ratio)
+        : String(existing.raw_unit ?? "") === "Wh_integrated_from_W_samples" && scalar > 0
+          ? Number(existing.generation_kwh) / scalar
+          : null;
+
+    service.upsertDailyGeneration({
+      plantId,
+      generationDate: dateStr,
+      generationKwh: scalar,
+      rawGenerationValue: scalar,
+      rawUnit: "kWh_monthly_row",
+      source: "charts/monthly_row",
+      pointsCount: existing.points_count ?? null,
+      checkMonthlyValue: scalar,
+      checkRatio: Number.isFinite(priorRatio) ? priorRatio : null,
+    });
+
+    log(
+      `RECONCILE ${dateStr}: ${existing.generation_kwh} (${existing.source}) -> ${scalar} kWh [charts/monthly_row]`,
+    );
+    if (sameValue) summary.relabeled++;
+    else summary.corrected++;
+  }
+
+  log(
+    `Canonical reconcile: checked=${summary.checked} corrected=${summary.corrected}` +
+      ` relabeled=${summary.relabeled} already_canonical=${summary.alreadyCanonical}` +
+      ` awaiting_scalar=${summary.awaitingCanonical} missing=${summary.missing}`,
+  );
+
+  return summary;
+}
+
+// ---------------------------------------------------------------------------
 // Gap-aware scanning
 // ---------------------------------------------------------------------------
 
@@ -454,6 +597,16 @@ async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {
   }
 
   const dates = enumerateDates(start, end);
+
+  // Repair historical rows against UTL's authoritative scalars FIRST so the
+  // expensive per-day verify/refetch below only sees genuinely broken days.
+  let reconciliation = null;
+  try {
+    reconciliation = await reconcileCanonicalValues({ from: start, to: end }, deps);
+  } catch (err) {
+    log(`WARN Canonical reconcile skipped this run: ${err.message}`);
+  }
+
   const existingRows = service.getDailyRecords({ from: start, to: end });
   const byDate = new Map(existingRows.map((r) => [r.generation_date, r]));
 
@@ -507,6 +660,7 @@ async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {
     checked: dates.length,
     alreadyValid,
     remainingMissing,
+    reconciliation,
   };
 }
 
@@ -567,5 +721,7 @@ module.exports = {
   computeGapScanRange,
   isArchivedRecordValid,
   previousCompletedIstDay,
+  reconcileCanonicalValues,
+  fetchMonthlyScalars,
   COLLECTOR_SESSION_KEY,
 };
