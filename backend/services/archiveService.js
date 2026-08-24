@@ -45,6 +45,11 @@ function statements() {
       WHERE plant_id = ? AND generation_date >= ? AND generation_date <= ?
       ORDER BY generation_date ASC
     `),
+    selectAllForPlant: db.prepare(`
+      SELECT * FROM solar_generation_daily
+      WHERE plant_id = ?
+      ORDER BY generation_date ASC
+    `),
     selectMonthly: db.prepare(`
       SELECT substr(generation_date, 1, 7) AS month,
              SUM(generation_kwh)           AS generation_kwh,
@@ -159,7 +164,7 @@ function upsertDailyGeneration(record) {
     record.checkMonthlyValue ?? null,
     record.checkRatio ?? null,
     existing ? existing.collected_at : now,
-    now
+    now,
   );
 
   const row = s.selectByDate.get(record.plantId, record.generationDate);
@@ -186,7 +191,7 @@ function finishRun(runId, { status, datesRequested, datesStored, error }) {
     datesRequested ?? 0,
     datesStored ?? 0,
     error ?? null,
-    runId
+    runId,
   );
 }
 
@@ -197,6 +202,9 @@ function finishRun(runId, { status, datesRequested, datesStored, error }) {
 function getDailyRecords({ date, from, to } = {}) {
   const s = statements();
   if (date) return s.selectByDate.all(PLANT_ID(), date);
+  // No filter at all must NOT fall through to selectRange with undefined
+  // binds (better-sqlite3 throws) - callers legitimately request full history.
+  if (!from && !to) return s.selectAllForPlant.all(PLANT_ID());
   return s.selectRange.all(PLANT_ID(), from, to);
 }
 

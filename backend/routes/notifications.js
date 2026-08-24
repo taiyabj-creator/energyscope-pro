@@ -112,21 +112,20 @@ if (IS_DEV) {
   /** Simulate an inverter transition push without waiting for reality. */
   router.post("/test/:kind", async (req, res) => {
     const kind = String(req.params.kind);
-
     if (kind === "online" || kind === "offline") {
+      const detectedAt = notificationMonitor.istTimeString(new Date());
       await pushService.broadcast({
         kind: kind === "online" ? "inverter_online" : "inverter_offline",
         title:
           kind === "online" ? "EnergyScope — Inverter Online" : "EnergyScope — Inverter Offline",
         body:
           kind === "online"
-            ? `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter is back online and producing power.`
-            : `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter has gone offline. EnergyScope will continue monitoring its status.`,
+            ? `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter is back online and producing power. Transition detected at ${detectedAt}.`
+            : `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter went offline at ${detectedAt}. EnergyScope will continue monitoring its status.`,
         url: kind === "online" ? "/" : "/diagnostics",
       });
       return res.json({ success: true, sent: kind });
     }
-
     if (kind === "summary") {
       try {
         const payload = await notificationMonitor.buildDailySummaryPayload({});

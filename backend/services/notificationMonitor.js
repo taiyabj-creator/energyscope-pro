@@ -11,7 +11,10 @@
  *    data.offline / data.partiallyOffline plantIds (the SAME source the
  *    dashboard's logger status uses).
  *  - Solar day close: weatherService.getWeather(lat, lon).sunset (open-meteo,
- *    the same service prediction.js uses) + 1 hour, Asia/Kolkata.
+ *    the same service prediction.js uses) + 1 hour, Asia/Kolkata. If the
+ *    weather service is unreachable the sunset is computed astronomically
+ *    from the plant coordinates (NOAA algorithm), so a third-party outage
+ *    can never silently suppress the daily summary.
  *  - Daily energy: trapezoidal integration of the charts/daily WATT curve
  *    via archiveCollector.integratePowerCurveWh() -> Wh/1000 = kWh. If
  *    today's authoritative archive row already exists it is preferred
@@ -61,6 +64,43 @@ function log(...args) {
 
 function istTimeString(instant) {
   return IST_TIME_FORMATTER.format(instant instanceof Date ? instant : new Date(instant));
+}
+
+const DEG = Math.PI / 180;
+
+/**
+ * Astronomical sunset (UTC Date) for a calendar date + coordinates, using the
+ * standard NOAA algorithm. Fallback ONLY for scheduling the daily summary
+ * when the weather service is unavailable - never used for production data.
+ */
+function computeSunsetUtc(dateStr, latDeg, lonDeg) {
+  const parts = String(dateStr).split("-").map(Number);
+  if (parts.length !== 3 || parts.some((v) => !Number.isFinite(v))) {
+    throw new Error(`invalid date '${dateStr}'`);
+  }
+  const [y, m, d] = parts;
+  const jdMidnightUtc = Date.UTC(y, m - 1, d) / 86400000 + 2440587.5;
+  const n = Math.round(jdMidnightUtc - 2451545.0);
+  const jStar = n - lonDeg / 360;
+  const meanAnomaly = (357.5291 + 0.98560028 * jStar) % 360;
+  const center =
+    1.9148 * Math.sin(meanAnomaly * DEG) +
+    0.02 * Math.sin(2 * meanAnomaly * DEG) +
+    0.0003 * Math.sin(3 * meanAnomaly * DEG);
+  const eclipticLon = (meanAnomaly + center + 180 + 102.9372) % 360;
+  const jTransit =
+    jStar + 0.0053 * Math.sin(meanAnomaly * DEG) - 0.0069 * Math.sin(2 * eclipticLon * DEG);
+  const declination = Math.asin(Math.sin(eclipticLon * DEG) * Math.sin(23.4397 * DEG));
+  const cosOmega =
+    (Math.sin(-0.833 * DEG) - Math.sin(latDeg * DEG) * Math.sin(declination)) /
+    (Math.cos(latDeg * DEG) * Math.cos(declination));
+  if (cosOmega > 1 || cosOmega < -1) {
+    throw new Error("sun never sets/rises at this latitude on this date");
+  }
+  // jSet counts days since J2000.0 -> convert to Unix epoch milliseconds
+  // via J2000 = JD 2451545.0 = 1970-01-01.5 UTC.
+  const jSet = jTransit + Math.acos(cosOmega) / (2 * Math.PI);
+  return new Date(Math.round((jSet + 2451545.0 - 2440587.5) * 86400000));
 }
 
 function getState(db, key) {
@@ -232,7 +272,7 @@ function createMonitor(overrides = {}) {
         await deps.sendPush({
           kind: "inverter_online",
           title: "EnergyScope — Inverter Online",
-          body: `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter is back online and producing power.`,
+          body: `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter is back online and producing power. Transition detected at ${istTimeString(deps.now())}.`,
           url: "/",
         });
       } else {
@@ -251,7 +291,7 @@ function createMonitor(overrides = {}) {
         await deps.sendPush({
           kind: "inverter_offline",
           title: "EnergyScope — Inverter Offline",
-          body: `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter has gone offline. EnergyScope will continue monitoring its status.`,
+          body: `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter went offline at ${istTimeString(deps.now())}. EnergyScope will continue monitoring its status.`,
           url: "/diagnostics",
         });
       } else {
@@ -269,11 +309,28 @@ function createMonitor(overrides = {}) {
     const todayIst = deps.archive.istDateString(deps.now());
     const cached = getState(deps.db, `sunset_${todayIst}`);
     if (cached) return new Date(Number(cached));
-    const weather = await deps.weather.getWeather(deps.lat, deps.lon);
-    if (!weather?.sunset) throw new Error("Sunset unavailable from weather service.");
-    const sunset = new Date(weather.sunset); // open-meteo returns ISO with offset
-    if (Number.isNaN(sunset.getTime())) throw new Error("Invalid sunset value.");
-    // Cache per IST day so we query open-meteo at most once per day.
+
+    let sunset;
+    try {
+      const weather = await deps.weather.getWeather(deps.lat, deps.lon);
+      if (!weather?.sunset) throw new Error("no sunset field in response");
+      sunset = new Date(weather.sunset); // open-meteo returns ISO with offset
+      if (Number.isNaN(sunset.getTime())) throw new Error("invalid sunset value");
+      log(`Sunset for ${todayIst}: ${istTimeString(sunset)} IST (weather service).`);
+    } catch (err) {
+      // A third-party outage must never suppress the daily summary: fall back
+      // to astronomical computation from the plant coordinates.
+      try {
+        sunset = computeSunsetUtc(todayIst, deps.lat, deps.lon);
+        log(
+          `WARN Weather unavailable (${err.message}); using computed sunset ${istTimeString(sunset)} IST.`,
+        );
+      } catch (astroErr) {
+        throw new Error(`Sunset unavailable: weather=${err.message}; astro=${astroErr.message}`);
+      }
+    }
+
+    // Cache per IST day so we query at most once per day.
     setState(deps.db, `sunset_${todayIst}`, String(sunset.getTime()));
     return sunset;
   }
@@ -465,5 +522,6 @@ module.exports = {
   computeRank,
   buildSummaryBody,
   istTimeString,
+  computeSunsetUtc,
   buildDailySummaryPayload,
 };
