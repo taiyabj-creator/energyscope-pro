@@ -71,7 +71,7 @@ function getState(db, key) {
 function setState(db, key, value) {
   db.prepare(
     `INSERT INTO notification_state (key, value, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
   ).run(key, value, Date.now());
 }
 
@@ -99,7 +99,7 @@ async function fetchDailyCurve(dateStr, session, deps = {}) {
         plant_id: Number(archiveService.PLANT_ID()),
         date_parameter: dateStr,
       }),
-    }
+    },
   );
   return JSON.parse(await response.text());
 }
@@ -152,17 +152,17 @@ function buildSummaryBody({ todayKwh, rank, peak }) {
   lines.push(
     Number.isFinite(todayKwh)
       ? `Today's generation: ${todayKwh.toFixed(2)} kWh.`
-      : "Today's generation data was unavailable."
+      : "Today's generation data was unavailable.",
   );
   lines.push(
     rank === null
       ? "Production rank: Not enough historical data yet."
-      : `Today's production ranked #${rank} among all recorded production days.`
+      : `Today's production ranked #${rank} among all recorded production days.`,
   );
   lines.push(
     peak
       ? `Today's peak power: ${peak.kw.toFixed(2)} kW at ${peak.timeLabel}.`
-      : "Peak power data was unavailable today."
+      : "Peak power data was unavailable today.",
   );
   return lines.join("\n\n");
 }
@@ -188,7 +188,9 @@ function createMonitor(overrides = {}) {
   };
   // sendPush is overridable for tests; default broadcasts to all subscriptions.
   deps.sendPush =
-    typeof overrides.sendPush === "function" ? overrides.sendPush : (payload) => deps.push.broadcast(payload);
+    typeof overrides.sendPush === "function"
+      ? overrides.sendPush
+      : (payload) => deps.push.broadcast(payload);
 
   let timer = null;
   let running = false;
@@ -231,7 +233,7 @@ function createMonitor(overrides = {}) {
           kind: "inverter_online",
           title: "EnergyScope — Inverter Online",
           body: `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter is back online and producing power.`,
-          url: "/dashboard",
+          url: "/",
         });
       } else {
         log(`Inverter ONLINE (no transition from ${prev}).`);
@@ -253,9 +255,7 @@ function createMonitor(overrides = {}) {
           url: "/diagnostics",
         });
       } else {
-        log(
-          `Offline candidate (streak ${streak}/${deps.offlineConfirmations}, state ${prev}).`
-        );
+        log(`Offline candidate (streak ${streak}/${deps.offlineConfirmations}, state ${prev}).`);
       }
       return;
     }
@@ -335,7 +335,9 @@ function createMonitor(overrides = {}) {
     }
 
     if (now.getTime() < closeAt.getTime()) {
-      log(`Production not closed yet (closes ${closeAt.toISOString()}, ~${istTimeString(closeAt)} IST).`);
+      log(
+        `Production not closed yet (closes ${closeAt.toISOString()}, ~${istTimeString(closeAt)} IST).`,
+      );
       return;
     }
 
@@ -353,15 +355,15 @@ function createMonitor(overrides = {}) {
       return;
     }
 
-    const archivedRows = deps.archive.getDailyRecords({}).filter(
-      (r) => r.generation_date !== todayIst
-    );
+    const archivedRows = deps.archive
+      .getDailyRecords({})
+      .filter((r) => r.generation_date !== todayIst);
     const rank = computeRank(figures.kwh ?? NaN, archivedRows);
 
     // Claim FIRST (idempotency), then send. A crash between claim and send
     // results in at-most-once delivery, never duplicates.
     db.prepare(
-      "INSERT INTO daily_summary_sent (plant_id, generation_date, sent_at, generation_kwh) VALUES (?, ?, ?, ?)"
+      "INSERT INTO daily_summary_sent (plant_id, generation_date, sent_at, generation_kwh) VALUES (?, ?, ?, ?)",
     ).run(deps.archive.PLANT_ID(), todayIst, Date.now(), figures.kwh ?? null);
 
     await deps.sendPush({
@@ -379,6 +381,11 @@ function createMonitor(overrides = {}) {
     try {
       await observeInverter();
       await maybeSendDailySummary();
+      // Persistent push retries ride the existing monitor loop; only rows
+      // whose next_attempt_at is due actually deliver (~every 30 minutes).
+      if (typeof deps.push.processDueRetries === "function") {
+        await deps.push.processDueRetries();
+      }
     } catch (err) {
       log(`Tick error: ${err.message}`);
     } finally {

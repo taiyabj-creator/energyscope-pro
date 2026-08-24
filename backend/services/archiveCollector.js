@@ -36,10 +36,14 @@
  * Gaps between daily samples longer than MAX_SAMPLE_GAP_MIN are truncated to
  * that cap so a missing stretch cannot fabricate energy.
  *
- * If the daily curve is unavailable for a date, the collector falls back to
- * the monthly endpoint's day-row value taken verbatim as kWh (explicitly
- * flagged in the `source` column), because a continuous archive is preferred
- * over holes. The uncertainty lives in raw_unit/source columns forever.
+ * CANONICAL VALUE POLICY: the charts/monthly day-row scalar is UTL's own
+ * statement of how much energy a day produced and is therefore authoritative.
+ * Whenever it exists it is stored verbatim as generation_kwh
+ * (source charts/monthly_row); the integrated W-curve value is kept only as
+ * a diagnostic cross-check (points_count + check_ratio = integrated/canonical).
+ * Integration becomes the archived value ONLY when UTL publishes no scalar
+ * for the date (source charts/daily_integrated). Provenance lives in the
+ * raw_unit/source columns forever.
  * ---------------------------------------------------------------------------
  */
 
@@ -119,7 +123,7 @@ async function ensureCollectorSession(deps = {}) {
 
   if (!email || !password) {
     throw new Error(
-      "Collector credentials missing. Set UTL_COLLECTOR_EMAIL and UTL_COLLECTOR_PASSWORD."
+      "Collector credentials missing. Set UTL_COLLECTOR_EMAIL and UTL_COLLECTOR_PASSWORD.",
     );
   }
 
@@ -150,11 +154,16 @@ async function ensureCollectorSession(deps = {}) {
 
 async function postChart(session, endpoint, body, deps = {}) {
   const api = deps.utlApi || utlApi;
-  const response = await api.utlFetch(COLLECTOR_SESSION_KEY, session, `${UTL_BASE}/charts/solar_power_per_plant/${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const response = await api.utlFetch(
+    COLLECTOR_SESSION_KEY,
+    session,
+    `${UTL_BASE}/charts/solar_power_per_plant/${endpoint}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
   const text = await response.text();
   return JSON.parse(text);
 }
@@ -162,10 +171,7 @@ async function postChart(session, endpoint, body, deps = {}) {
 /** Non-fatal check that the configured plant id exists upstream. */
 async function verifyPlantId(session, plantId, deps = {}) {
   try {
-    const status = await (deps.utlApi || utlApi).getPlantStatus(
-      COLLECTOR_SESSION_KEY,
-      session
-    );
+    const status = await (deps.utlApi || utlApi).getPlantStatus(COLLECTOR_SESSION_KEY, session);
     const ids = (status?.data?.total?.plantIds ?? []).map(String);
     if (ids.length === 0) {
       log("WARN PlantStatus returned no plant ids.");
@@ -189,7 +195,7 @@ async function collectDate(dateStr, deps = {}) {
 
   const session = await ensureCollectorSession(deps);
 
-  if (!(deps.skipPlantCheck)) {
+  if (!deps.skipPlantCheck) {
     await verifyPlantId(session, plantId, deps);
   }
 
@@ -203,7 +209,7 @@ async function collectDate(dateStr, deps = {}) {
       session,
       "daily",
       { plant_id: Number(plantId), date_parameter: dateStr },
-      deps
+      deps,
     );
   } catch (err) {
     dailyError = err.message;
@@ -219,11 +225,9 @@ async function collectDate(dateStr, deps = {}) {
       session,
       "monthly",
       { plant_id: Number(plantId), date_parameter: month },
-      deps
+      deps,
     );
-    monthlyRow = (monthlyJson?.results ?? []).find(
-      (row) => Number(row.date) === dayNumber
-    );
+    monthlyRow = (monthlyJson?.results ?? []).find((row) => Number(row.date) === dayNumber);
   } catch (err) {
     log(`WARN Monthly endpoint failed for ${dateStr}: ${err.message}`);
   }
@@ -234,6 +238,8 @@ async function collectDate(dateStr, deps = {}) {
       : null;
 
   // --- Decide the normalized value -----------------------------------------
+  // Canonical = the UTL monthly day-row scalar whenever it exists. The
+  // integrated curve is demoted to a diagnostic (points_count / check_ratio).
   let generationKwh = null;
   let rawGenerationValue = null;
   let rawUnit = null;
@@ -242,56 +248,54 @@ async function collectDate(dateStr, deps = {}) {
   let checkMonthlyValue = null;
   let checkRatio = null;
 
-  const integration =
-    dailyJson ? integratePowerCurveWh(dailyJson.results) : null;
+  const integration = dailyJson ? integratePowerCurveWh(dailyJson.results) : null;
+  const integratedKwh =
+    integration && integration.pointsCount > 0 ? integration.wattHours / 1000 : null;
 
-  if (integration && integration.pointsCount > 0) {
-    // Daily samples are WATTS, so integration.wattHours is watt-hours.
-    const integratedWh = integration.wattHours;
-    const generationKwhFromCurve = integratedWh / 1000; // W·h -> kWh
-    generationKwh = generationKwhFromCurve;
-    pointsCount = integration.pointsCount;
-    source = "charts/daily_integrated";
+  if (monthlyValue !== null) {
+    // The single scalar UTL emits for this day is authoritative: stored verbatim.
+    generationKwh = monthlyValue;
+    rawGenerationValue = monthlyValue;
+    rawUnit = "kWh_monthly_row";
+    source = "charts/monthly_row";
     checkMonthlyValue = monthlyValue;
 
-    if (integration.cappedGap) {
-      log(`WARN ${dateStr}: curve had a gap >${MAX_SAMPLE_GAP_MIN}min; contribution truncated.`);
-    }
+    if (integratedKwh !== null) {
+      pointsCount = integration.pointsCount;
+      checkRatio = monthlyValue > 0 ? integratedKwh / monthlyValue : null;
 
-    if (monthlyValue !== null) {
-      // The single scalar UTL emits for this day is preserved verbatim (kWh).
-      rawGenerationValue = monthlyValue;
-      rawUnit = "kWh_monthly_row";
-      checkRatio = monthlyValue > 0 ? generationKwh / monthlyValue : null;
+      if (integration.cappedGap) {
+        log(
+          `WARN ${dateStr}: curve had a gap >${MAX_SAMPLE_GAP_MIN}min; integrated diagnostic understates.`,
+        );
+      }
 
       if (
         checkRatio !== null &&
         (checkRatio < CHECK_RATIO_WARN_LOW || checkRatio > CHECK_RATIO_WARN_HIGH)
       ) {
         log(
-          `WARN ${dateStr}: integrated ${generationKwh.toFixed(2)} kWh vs monthly row ${monthlyValue} kWh (ratio ${checkRatio.toFixed(3)}). Units may differ - investigate before trusting either.`
+          `WARN ${dateStr}: integrated diagnostic ${integratedKwh.toFixed(2)} kWh vs canonical ${monthlyValue} kWh (ratio ${checkRatio.toFixed(3)}); canonical monthly row stored.`,
         );
       }
-    } else {
-      rawGenerationValue = integratedWh;
-      rawUnit = "Wh_integrated_from_W_samples";
     }
-  } else if (monthlyValue !== null) {
-    // Explicit fallback - flagged in source forever. Monthly rows are
-    // confirmed kWh, but the daily curve was unavailable so provenance is flagged.
-    generationKwh = monthlyValue;
-    rawGenerationValue = monthlyValue;
-    rawUnit = "kWh_monthly_row";
-    source = "charts/monthly_fallback";
-    log(`WARN ${dateStr}: archived from monthly fallback (daily curve unavailable${dailyError ? ": " + dailyError : ""}).`);
+  } else if (integratedKwh !== null) {
+    // No upstream scalar for this date: integrate the WATT samples instead.
+    generationKwh = integratedKwh;
+    pointsCount = integration.pointsCount;
+    source = "charts/daily_integrated";
+    rawGenerationValue = integration.wattHours;
+    rawUnit = "Wh_integrated_from_W_samples";
+
+    if (integration.cappedGap) {
+      log(`WARN ${dateStr}: curve had a gap >${MAX_SAMPLE_GAP_MIN}min; contribution truncated.`);
+    }
   } else {
-    throw new Error(
-      `No usable data for ${dateStr}${dailyError ? ` (daily: ${dailyError})` : ""}`
-    );
+    throw new Error(`No usable data for ${dateStr}${dailyError ? ` (daily: ${dailyError})` : ""}`);
   }
 
   log(
-    `Raw generation: ${rawGenerationValue ?? "n/a"} (${rawUnit ?? "n/a"}) | Normalized: ${generationKwh.toFixed(3)} kWh via ${source}`
+    `Raw generation: ${rawGenerationValue ?? "n/a"} (${rawUnit ?? "n/a"}) | Normalized: ${generationKwh.toFixed(3)} kWh via ${source}`,
   );
 
   const record = {
@@ -350,14 +354,16 @@ function previousCompletedIstDay(now = new Date()) {
 
 /**
  * Verifies an existing solar_generation_daily row against the collector's own
- * acceptance rules (same thresholds as live collection):
+ * acceptance rules:
  *   - generation_kwh present, finite, non-negative
- *   - source is one of the two known provenance labels
- *   - charts/daily_integrated rows must carry a non-zero points_count
- *   - when a monthly cross-check value exists, its ratio must sit inside the
- *     CHECK_RATIO_WARN band used during collection
- * charts/monthly_fallback rows are accepted (deliberate continuity-over-holes
- * policy; their provenance stays flagged in `source` forever).
+ *   - source is one of the known provenance labels
+ *   - charts/monthly_row rows hold the canonical UTL scalar and are always
+ *     valid; their check_ratio is a purely diagnostic integration comparison,
+ *     so it must NOT gate validity (a gappy day legitimately skews it)
+ *   - charts/monthly_fallback rows already hold the UTL scalar verbatim
+ *   - charts/daily_integrated rows stay valid ONLY when no monthly scalar
+ *     existed at collection time; once a cross-check value is present the row
+ *     predates the canonical policy and the next gap-aware scan refreshes it
  */
 function isArchivedRecordValid(row) {
   if (!row) return false;
@@ -366,23 +372,20 @@ function isArchivedRecordValid(row) {
   if (!Number.isFinite(kwh) || kwh < 0) return false;
 
   const source = String(row.source || "");
-  if (source !== "charts/daily_integrated" && source !== "charts/monthly_fallback") {
+  if (source === "charts/monthly_row" || source === "charts/monthly_fallback") {
+    return true;
+  }
+  if (source !== "charts/daily_integrated") {
     return false;
   }
-  if (source === "charts/daily_integrated" && !(Number(row.points_count) > 0)) {
+  if (!(Number(row.points_count) > 0)) {
     return false;
   }
 
   const monthly = row.check_monthly_value;
   if (monthly !== null && monthly !== undefined && Number(monthly) > 0) {
-    const ratio = Number(row.check_ratio);
-    if (
-      !Number.isFinite(ratio) ||
-      ratio < CHECK_RATIO_WARN_LOW ||
-      ratio > CHECK_RATIO_WARN_HIGH
-    ) {
-      return false;
-    }
+    // UTL published a scalar for this day: refresh to the canonical value.
+    return false;
   }
 
   return true;
@@ -405,9 +408,7 @@ function computeGapScanRange(deps = {}) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(configured)) {
       start = configured;
     } else {
-      log(
-        `WARN ARCHIVE_START_DATE '${configured}' is not a valid YYYY-MM-DD date; ignoring.`
-      );
+      log(`WARN ARCHIVE_START_DATE '${configured}' is not a valid YYYY-MM-DD date; ignoring.`);
     }
   }
   if (!start) {
@@ -474,12 +475,9 @@ async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {
     }
   }
 
-  const collection = await runCollection(
-    [...missing, ...stale],
-    triggerType,
-    deps,
-    { requestedCount: dates.length }
-  );
+  const collection = await runCollection([...missing, ...stale], triggerType, deps, {
+    requestedCount: dates.length,
+  });
 
   // Ground-truth recount straight from the database: anything without a valid
   // row now is still missing, whatever happened above.
@@ -538,12 +536,7 @@ async function runCollection(dates, triggerType, deps = {}, opts = {}) {
     }
   }
 
-  const status =
-    failures.length === 0
-      ? "success"
-      : stored > 0
-        ? "partial"
-        : "failed";
+  const status = failures.length === 0 ? "success" : stored > 0 ? "partial" : "failed";
 
   service.finishRun(runId, {
     status,
@@ -555,10 +548,10 @@ async function runCollection(dates, triggerType, deps = {}, opts = {}) {
   const coverage = service.getCoverage();
   log("Collection completed.");
   log(
-    `Summary: requested=${requestedCount} stored=${stored} (new=${inserted} refreshed=${updated} unchanged=${unchanged}) failed=${failures.length}`
+    `Summary: requested=${requestedCount} stored=${stored} (new=${inserted} refreshed=${updated} unchanged=${unchanged}) failed=${failures.length}`,
   );
   log(
-    `Coverage: ${coverage.earliest ?? "-"} .. ${coverage.latest ?? "-"} (${coverage.daysArchived} days)`
+    `Coverage: ${coverage.earliest ?? "-"} .. ${coverage.latest ?? "-"} (${coverage.daysArchived} days)`,
   );
 
   return { status, stored, inserted, updated, unchanged, failures, coverage };

@@ -1,22 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  Bell,
-  CalendarCheck,
-  Droplets,
-  Menu,
-  Moon,
-  Sun,
-  WifiOff,
-  Info,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Bell, Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
-import { useLivePower, useLogger, usePlantInfo } from "@/hooks/useSolarData";
-import { useAlerts } from "@/hooks/useAlerts";
+import { useLivePower, useLogger, useNotifications, usePlantInfo } from "@/hooks/useSolarData";
 import { Chip, StatusDot } from "@/components/ui/primitives";
 
-import { cn } from "@/lib/utils";
 import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
 
 function useClock() {
@@ -32,28 +20,12 @@ function useClock() {
 export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar: () => void }) {
   const { theme, toggle } = useTheme();
   const now = useClock();
+  const navigate = useNavigate();
   const { data: plant } = usePlantInfo();
   const { data: live } = useLivePower();
   const { data: logger } = useLogger();
-  const { alerts, count } = useAlerts();
-  const [openNotifications, setOpenNotifications] = useState(false);
-  const popRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!openNotifications) return;
-    const onClick = (e: MouseEvent) => {
-      if (!popRef.current?.contains(e.target as Node)) setOpenNotifications(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenNotifications(false);
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [openNotifications]);
-
-  const unread = count;
+  const { data: notifications } = useNotifications();
+  const unread = notifications?.filter((n) => n.unread).length ?? 0;
   const freshness = formatMeasurementFreshness(live?.timestamp);
 
   return (
@@ -118,65 +90,19 @@ export function Header({ title, onOpenSidebar }: { title: string; onOpenSidebar:
             {theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
           </button>
 
-          <div className="relative" ref={popRef}>
-            <button
-              type="button"
-              onClick={() => setOpenNotifications((v) => !v)}
-              aria-label="Notifications"
-              aria-expanded={openNotifications}
-              className="relative grid size-10 place-items-center rounded-xl border border-border/70 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-            >
-              <Bell className="size-[18px]" />
-              {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid size-4 place-items-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
-                  {unread}
-                </span>
-              )}
-            </button>
-            <AnimatePresence>
-              {openNotifications && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ duration: 0.16 }}
-                  className="panel-solid absolute right-0 top-12 z-40 w-[min(92vw,22rem)] overflow-hidden p-0"
-                >
-                  <p className="border-b border-border/60 px-4 py-3 text-sm font-semibold">
-                    Notifications
-                  </p>
-
-                  <ul className="scroll-slim max-h-80 divide-y divide-border/60 overflow-y-auto">
-                    {alerts.length === 0 ? (
-                      <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        No active alerts 🎉
-                      </li>
-                    ) : (
-                      alerts.map((n) => (
-                        <li key={n.id} className="flex gap-3 px-4 py-3">
-                          <span
-                            className={cn(
-                              "mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg",
-                              n.severity === "error"
-                                ? "bg-destructive/12 text-destructive"
-                                : "bg-warning/12 text-warning",
-                            )}
-                          >
-                            <AlertTriangle className="size-3.5" />
-                          </span>
-
-                          <div className="min-w-0">
-                            <p className="text-[13px] font-medium">{n.title}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{n.description}</p>
-                          </div>
-                        </li>
-                      ))
-                    )}
-                  </ul>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/notifications" })}
+            aria-label="Notifications"
+            className="relative grid size-10 place-items-center rounded-xl border border-border/70 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <Bell className="size-[18px]" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 grid size-4 place-items-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
+          </button>
 
           <a
             href="/profile"

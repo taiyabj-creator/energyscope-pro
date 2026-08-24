@@ -57,6 +57,39 @@ CREATE TABLE IF NOT EXISTS notification_state (
   value TEXT,
   updated_at INTEGER NOT NULL
 );
+
+-- Per-subscription delivery retry queue. One row per (subscription, payload)
+-- whose web-push delivery failed transiently; retried by pushService until
+-- delivered, pruned, or the attempt cap is reached. Survives restarts.
+CREATE TABLE IF NOT EXISTS push_retry (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subscription_id INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER NOT NULL,
+  last_error TEXT,
+  created_at INTEGER NOT NULL,
+  UNIQUE (subscription_id, payload_json)
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_retry_due
+ON push_retry(next_attempt_at);
+
+-- In-app notification center feed. Recorded for every broadcast so history
+-- exists even when no device is subscribed or delivery is still retrying.
+-- Rows older than RETENTION_MS are purged opportunistically.
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  url TEXT,
+  read INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_created
+ON notifications(created_at);
 `);
 
 // Migration: expiration_time (nullable) added after initial rollout. Browsers

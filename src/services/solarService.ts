@@ -591,42 +591,81 @@ export async function fetchMaintenance(): Promise<MaintenanceState> {
   };
 }
 
-export async function fetchNotifications(): Promise<NotificationItem[]> {
-  return [
-    {
-      id: "n1",
-      kind: "anomaly",
-      title: "Production below expectation",
-      detail: "Yesterday produced 14% less than clear-sky estimate for similar weather.",
-      time: "2h ago",
-      unread: true,
-    },
-    {
-      id: "n2",
-      kind: "cleaning",
-      title: "Cleaning suggested",
-      detail: "Peak power has declined over 5 consecutive clear days.",
-      time: "Yesterday",
-      unread: true,
-    },
-    {
-      id: "n3",
-      kind: "inspection",
-      title: "Inspection due in 21 days",
-      detail: "Last inspection was on 19 May 2026.",
-      time: "3d ago",
-      unread: false,
-    },
-    {
-      id: "n4",
-      kind: "offline",
-      title: "Logger reconnected",
-      detail: "Data gap of 11 minutes was backfilled.",
-      time: "4d ago",
-      unread: false,
-    },
-  ];
+const IST_DATE_KEY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const IST_DAY_MONTH = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Kolkata",
+  day: "2-digit",
+  month: "short",
+});
+
+/** 12-hour clock timestamp for a feed item: "Today, 6:42 PM" / "23 Aug, 1:05 PM". */
+function formatNotificationTime(createdAtMs: number): string {
+  const date = new Date(createdAtMs);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const dayKey = IST_DATE_KEY.format(date);
+  const todayKey = IST_DATE_KEY.format(now);
+  const yesterdayKey = IST_DATE_KEY.format(new Date(now.getTime() - 86_400_000));
+  const dayLabel =
+    dayKey === todayKey
+      ? "Today"
+      : dayKey === yesterdayKey
+        ? "Yesterday"
+        : IST_DAY_MONTH.format(date);
+  const clock = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  });
+  return `${dayLabel}, ${clock}`;
 }
+
+export async function fetchNotifications(): Promise<NotificationItem[]> {
+  const json = await apiRequest<{
+    success: boolean;
+    data?: {
+      id: number;
+      kind: string;
+      title: string;
+      body: string;
+      url: string | null;
+      read: boolean;
+      created_at: number;
+    }[];
+  }>("/api/notifications/recent");
+
+  return (json.data ?? []).map((row) => ({
+    id: String(row.id),
+    kind: row.kind,
+    title: row.title,
+    detail: row.body,
+    time: formatNotificationTime(row.created_at),
+    unread: !row.read,
+    url: row.url,
+  }));
+}
+
+export async function markNotificationsRead(ids?: string[]): Promise<void> {
+  await apiRequest("/api/notifications/read", {
+    method: "POST",
+    body: JSON.stringify(
+      ids && ids.length > 0 ? { ids: ids.map((id) => Number(id)) } : { all: true },
+    ),
+  });
+}
+
+export async function dismissNotification(id: string): Promise<void> {
+  await apiRequest(`/api/notifications/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function updateMaintenance(updates: {
   lastCleaning?: string;
   lastInspection?: string;

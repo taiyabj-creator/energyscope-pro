@@ -127,6 +127,31 @@ export const useUpdateMaintenance = () => {
 
 export const useNotifications = () =>
   useQuery({ queryKey: ["notifications"], queryFn: api.fetchNotifications });
+
+export const useMarkNotificationsRead = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids?: string[]) => api.markNotificationsRead(ids),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+};
+
+export const useDismissNotification = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => api.dismissNotification(id),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+};
+
 export const usePrediction = () =>
   useQuery({
     queryKey: ["prediction"],

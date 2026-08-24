@@ -31,7 +31,10 @@ router.post("/subscribe", (req, res) => {
   try {
     const { subscription } = req.body || {};
     pushService.saveSubscription(req.user?.email ?? "unknown", subscription);
-    res.json({ success: true, subscribed: pushService.countForEmail(req.user?.email ?? "unknown") });
+    res.json({
+      success: true,
+      subscribed: pushService.countForEmail(req.user?.email ?? "unknown"),
+    });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -60,6 +63,51 @@ router.get("/status", (req, res) => {
   });
 });
 
+// In-app notification center feed (7-day retention enforced server-side).
+router.get("/recent", (req, res) => {
+  try {
+    const items = pushService.listNotifications({ limit: req.query.limit });
+    res.json({
+      success: true,
+      data: items.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        title: row.title,
+        body: row.body,
+        url: row.url,
+        read: !!row.read,
+        created_at: row.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error("[NOTIFICATIONS] recent error:", err.message);
+    res.status(500).json({ success: false, message: "Notification feed unavailable." });
+  }
+});
+
+router.post("/read", (req, res) => {
+  try {
+    const body = req.body || {};
+    const ids = Array.isArray(body.ids) ? body.ids.filter((n) => Number.isFinite(Number(n))) : null;
+    const updated = pushService.markNotificationsRead({ ids });
+    res.json({ success: true, updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Could not mark notifications read." });
+  }
+});
+
+router.delete("/:id", (req, res) => {
+  try {
+    const dismissed = pushService.dismissNotification(req.params.id);
+    if (!dismissed) {
+      return res.status(404).json({ success: false, message: "Notification not found." });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Could not dismiss notification." });
+  }
+});
+
 if (IS_DEV) {
   /** Simulate an inverter transition push without waiting for reality. */
   router.post("/test/:kind", async (req, res) => {
@@ -69,14 +117,12 @@ if (IS_DEV) {
       await pushService.broadcast({
         kind: kind === "online" ? "inverter_online" : "inverter_offline",
         title:
-          kind === "online"
-            ? "EnergyScope — Inverter Online"
-            : "EnergyScope — Inverter Offline",
+          kind === "online" ? "EnergyScope — Inverter Online" : "EnergyScope — Inverter Offline",
         body:
           kind === "online"
             ? `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter is back online and producing power.`
             : `${process.env.NOTIFY_PLANT_NAME || "The plant"} inverter has gone offline. EnergyScope will continue monitoring its status.`,
-        url: kind === "online" ? "/dashboard" : "/diagnostics",
+        url: kind === "online" ? "/" : "/diagnostics",
       });
       return res.json({ success: true, sent: kind });
     }
@@ -85,7 +131,9 @@ if (IS_DEV) {
       try {
         const payload = await notificationMonitor.buildDailySummaryPayload({});
         if (!payload) {
-          return res.status(409).json({ success: false, message: "No usable data for today's summary." });
+          return res
+            .status(409)
+            .json({ success: false, message: "No usable data for today's summary." });
         }
         await pushService.broadcast(payload);
         return res.json({ success: true, sent: "summary", payload });

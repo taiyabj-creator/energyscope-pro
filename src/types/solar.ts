@@ -186,9 +186,11 @@ export interface MaintenanceState {
 
 export interface NotificationItem {
   id: string;
-  kind: "anomaly" | "cleaning" | "inspection" | "offline" | "info";
+  kind: string;
   title: string;
   detail: string;
+  /** Display-ready timestamp in 12-hour IST form, e.g. "Today, 6:42 PM". */
   time: string;
   unread: boolean;
+  url?: string | null;
 }

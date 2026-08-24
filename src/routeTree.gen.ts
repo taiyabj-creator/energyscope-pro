@@ -17,6 +17,7 @@ import { Route as EnergyRouteImport } from './routes/energy'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MaintenanceRouteImport } from './routes/maintenance'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as WeatherRouteImport } from './routes/weather'
@@ -61,6 +62,11 @@ const MaintenanceRoute = MaintenanceRouteImport.update({
   path: '/maintenance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/maintenance': typeof MaintenanceRoute
+  '/notifications': typeof NotificationsRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/maintenance': typeof MaintenanceRoute
+  '/notifications': typeof NotificationsRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/maintenance': typeof MaintenanceRoute
+  '/notifications': typeof NotificationsRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/login'
     | '/maintenance'
+    | '/notifications'
     | '/profile'
     | '/settings'
     | '/weather'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/login'
     | '/maintenance'
+    | '/notifications'
     | '/profile'
     | '/settings'
     | '/weather'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/login'
     | '/maintenance'
+    | '/notifications'
     | '/profile'
     | '/settings'
     | '/weather'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
   MaintenanceRoute: typeof MaintenanceRoute
+  NotificationsRoute: typeof NotificationsRoute
   ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
   WeatherRoute: typeof WeatherRoute
@@ -231,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MaintenanceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -264,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
   MaintenanceRoute: MaintenanceRoute,
+  NotificationsRoute: NotificationsRoute,
   ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,
   WeatherRoute: WeatherRoute,
