@@ -1,100 +1,93 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Dependencies
+node_modules/
+**/node_modules/
 
-node_modules
-dist
-dist-ssr
-.output
-.vinxi
-.tanstack/**
-.nitro
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!backend/.env.example
+backend/.env
+
+# Build / output
+dist/
+dist-ssr/
+build/
+.output/
+.vite/
+.vinxi/
+.cache/
+dev-dist/
+.tanstack/
+.nitro/
+.vercel/
+
+# Vite / TanStack generated
 *.local
 
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
 
-# Editor directories and files
+# Test / coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Runtime / log files
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime / PID files
+*.pid
+*.pid.lock
+
+# SQLite databases (runtime + test)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*-shm
+*-wal
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / editor
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
+*.swp
+*.swo
 *.sw?
 
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-build/
-
-# Environment files
-.env
-backend/.env
+# Windows development artifacts
+*.bak
 
 # Python
 __pycache__/
 *.pyc
 
-# Tokens / Secrets
-token.txt
-
-# Logs
-*.log
-npm-debug.log*
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-build/
-
-# Environment files
-.env
-**/.env
-
-# Tokens
+# Tokens / secrets
 token.txt
 **/token.txt
-
-# Python
-__pycache__/
-*.pyc
-
-# Logs
-*.log
-npm-debug.log*
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# SQLite
-*.db
-*.db-shm
-*.db-wal
-.vercel
-.env*

@@ -226,9 +226,29 @@ async function buildPlantContext({ token, session }) {
       bestDay: { date: best.date, kwh: round2(best.generation) },
       worstDay: { date: worst.date, kwh: round2(worst.generation) },
       last7DaysAverageKwh: round2(last7.reduce((s, d) => s + d.generation, 0) / last7.length),
-      yesterdayKwh: round2(history[history.length - 1].generation),
-      yesterdayDate: history[history.length - 1].date,
+      yesterdayKwh: round2(history[0].generation),
+      yesterdayDate: history[0].date,
     };
+  }
+
+  // --- Explicit recent-days (date-keyed) for unambiguous relative-date usage -
+  const recentDays = [];
+  if (isAvailable(today) && typeof today.generationKwh === "number") {
+    recentDays.push({ date: nowIst, label: "today", generationKwh: today.generationKwh });
+  }
+  if (Array.isArray(history) && history.length >= 1) {
+    recentDays.push({
+      date: history[0].date,
+      label: "yesterday",
+      generationKwh: round2(history[0].generation),
+    });
+  }
+  if (Array.isArray(history) && history.length >= 2) {
+    recentDays.push({
+      date: history[1].date,
+      label: "day before yesterday",
+      generationKwh: round2(history[1].generation),
+    });
   }
 
   // --- Weather ----------------------------------------------------------------
@@ -292,6 +312,7 @@ async function buildPlantContext({ token, session }) {
     today,
     month,
     recentHistory,
+    recentDays,
     weather,
     forecast,
     performance,
@@ -337,6 +358,19 @@ function renderContextAppendix(context) {
     ),
   );
   lines.push("");
+  if (Array.isArray(c.recentDays) && c.recentDays.length > 0) {
+    const dayLines = c.recentDays.map(
+      (d) =>
+        `${d.date} (${d.label}): ${typeof d.generationKwh === "number" ? d.generationKwh + " kWh" : "unavailable"}`,
+    );
+    lines.push(
+      section(
+        "RECENT DATES (MEASURED - use these for relative-date questions like today/yesterday/day-before-yesterday)",
+        dayLines.join("\n"),
+      ),
+    );
+    lines.push("");
+  }
   lines.push(
     section(
       "THIS MONTH (MEASURED)",
