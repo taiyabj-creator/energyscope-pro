@@ -381,6 +381,8 @@ function createMonitor(overrides = {}) {
       .get(deps.archive.PLANT_ID(), todayIst);
     if (already) return;
 
+    log(`Summary triggered for ${todayIst}.`);
+
     // Determine production close = sunset + 1h.
     let closeAt;
     try {
@@ -412,6 +414,8 @@ function createMonitor(overrides = {}) {
       return;
     }
 
+    log(`Summary generated for ${todayIst}: ${Number.isFinite(figures.kwh) ? figures.kwh.toFixed(2) : "unavailable"} kWh.`);
+
     const archivedRows = deps.archive
       .getDailyRecords({})
       .filter((r) => r.generation_date !== todayIst);
@@ -423,13 +427,26 @@ function createMonitor(overrides = {}) {
       "INSERT INTO daily_summary_sent (plant_id, generation_date, sent_at, generation_kwh) VALUES (?, ?, ?, ?)",
     ).run(deps.archive.PLANT_ID(), todayIst, Date.now(), figures.kwh ?? null);
 
-    await deps.sendPush({
-      kind: "daily_summary",
-      title: "EnergyScope — Daily Production Summary",
-      body: buildSummaryBody({ todayKwh: figures.kwh ?? NaN, rank, peak: figures.peak }),
-      url: "/history",
-    });
-    log(`Daily summary sent for ${todayIst}.`);
+    try {
+      await deps.sendPush({
+        kind: "daily_summary",
+        title: "EnergyScope — Daily Production Summary",
+        body: buildSummaryBody({ todayKwh: figures.kwh ?? NaN, rank, peak: figures.peak }),
+        url: "/history",
+      });
+      log(`Summary sent for ${todayIst}.`);
+    } catch (err) {
+      log(`Summary failed for ${todayIst}: ${err.message}`);
+      // Roll back the claim so the next tick can retry delivery.
+      try {
+        db.prepare(
+          "DELETE FROM daily_summary_sent WHERE plant_id = ? AND generation_date = ?",
+        ).run(deps.archive.PLANT_ID(), todayIst);
+      } catch (_) {
+        // Best-effort cleanup; if it fails the summary will be retried on
+        // the next server restart via the same idempotency gate.
+      }
+    }
   }
 
   async function tick() {

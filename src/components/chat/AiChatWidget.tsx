@@ -90,7 +90,7 @@ export function AiChatWidget() {
               </span>
               <div className="flex-1">
                 <h2 className="text-sm font-semibold leading-tight">Solar Assistant</h2>
-                <p className="text-xs text-muted-foreground">Powered by Gemini via EnergyScope</p>
+                <p className="text-xs text-muted-foreground">Making your solar data smarter</p>
               </div>
               <Button
                 variant="ghost"

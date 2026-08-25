@@ -9,7 +9,7 @@ const PYTHON_SCRIPT = path.join(
 
 async function login(email, password) {
   return new Promise((resolve, reject) => {
-    const py = spawn("python", [PYTHON_SCRIPT]);
+    const py = spawn(process.env.PYTHON_BIN || "python3", [PYTHON_SCRIPT]);
 
     let stdout = "";
     let stderr = "";
