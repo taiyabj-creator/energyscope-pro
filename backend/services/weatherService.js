@@ -5,15 +5,14 @@ async function getWeather(latitude, longitude) {
     latitude: String(latitude),
     longitude: String(longitude),
     timezone: "auto",
-    current:
-      "cloud_cover,precipitation_probability,weather_code,uv_index",
+    current: "cloud_cover,precipitation_probability,weather_code,uv_index",
     daily: "sunrise,sunset",
     forecast_days: "1",
   });
 
-  const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?${params}`
-  );
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
+    signal: AbortSignal.timeout(8_000),
+  });
 
   if (!response.ok) {
     throw new Error("Unable to fetch weather");

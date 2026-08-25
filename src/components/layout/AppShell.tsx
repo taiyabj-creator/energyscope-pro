@@ -4,6 +4,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { Header } from "@/components/layout/Header";
 import { SidebarNav, navItems } from "@/components/layout/SidebarNav";
 import { usePlantInfo } from "@/hooks/useSolarData";
+import { AiChatWidget } from "@/components/chat/AiChatWidget";
 import { cn } from "@/lib/utils";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -16,9 +17,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const title =
     navItems.find((i) => i.to === pathname)?.label ??
     (pathname === "/profile" ? "Profile" : "UTL Solar Dashboard");
-    if (pathname === "/login") {
-     return <>{children}</>;
-}
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
 
   return (
     <div className="relative min-h-screen">
@@ -85,6 +86,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </AnimatePresence>
         </main>
       </div>
+
+      <AiChatWidget />
     </div>
   );
 }

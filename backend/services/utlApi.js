@@ -4,12 +4,7 @@ const path = require("path");
 const pythonAdapter = require("../adapters/pythonAdapter");
 const sessionService = require("./sessionService");
 
-
-const PYTHON_SCRIPT = path.join(
-  __dirname,
-  "../adapters/python/utl_api.py"
-);
-
+const PYTHON_SCRIPT = path.join(__dirname, "../adapters/python/utl_api.py");
 
 async function getPlantStatus(jwtToken, session) {
   if (!session?.utlToken) {
@@ -18,14 +13,9 @@ async function getPlantStatus(jwtToken, session) {
 
   console.log("UTL authentication token available.");
 
-  const response = await utlFetch(
-    jwtToken,
-    session,
-    "https://utlsolarrms.com/api/plantStatus",
-    {
-      method: "GET",
-    }
-  );
+  const response = await utlFetch(jwtToken, session, "https://utlsolarrms.com/api/plantStatus", {
+    method: "GET",
+  });
 
   console.log("Status:", response.status);
 
@@ -43,15 +33,10 @@ async function refreshSessionToken(jwtToken, session) {
     throw new Error("UTL login credentials missing.");
   }
 
-  const response = await pythonAdapter.login(
-    session.email,
-    session.password
-  );
+  const response = await pythonAdapter.login(session.email, session.password);
 
   if (!response?.success || !response?.token) {
-    throw new Error(
-      response?.error || "Failed to refresh UTL token."
-    );
+    throw new Error(response?.error || "Failed to refresh UTL token.");
   }
 
   session.utlToken = response.token;
@@ -63,19 +48,24 @@ async function refreshSessionToken(jwtToken, session) {
   return response.token;
 }
 
+const UTL_FETCH_TIMEOUT_MS = 12_000;
+
 async function utlFetch(jwtToken, session, url, options = {}) {
   if (!session?.utlToken) {
     throw new Error("UTL authentication token missing.");
   }
 
+  const headers = {
+    ...(options.headers || {}),
+    Authorization: `Bearer ${session.utlToken}`,
+    "X-Device-ID": "hbeon_mobile",
+    Accept: "application/json",
+  };
+
   let response = await fetch(url, {
     ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${session.utlToken}`,
-      "X-Device-ID": "hbeon_mobile",
-      Accept: "application/json",
-    },
+    headers,
+    signal: AbortSignal.timeout(UTL_FETCH_TIMEOUT_MS),
   });
 
   if (response.status !== 401) {
@@ -94,6 +84,7 @@ async function utlFetch(jwtToken, session, url, options = {}) {
       "X-Device-ID": "hbeon_mobile",
       Accept: "application/json",
     },
+    signal: AbortSignal.timeout(UTL_FETCH_TIMEOUT_MS),
   });
 
   if (response.status === 401) {

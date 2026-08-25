@@ -126,6 +126,7 @@ backend/
         inverter.js           live inverter/device data
         maintenance.js        maintenance history CRUD
         notifications.js      web push subscription management + VAPID key
+        ai.js                 AI chat endpoint (Gemini proxy, rate-limited)
         plant.js              plant information
         prediction.js         daily energy prediction + performance score
     services/                 business logic
@@ -142,6 +143,7 @@ backend/
         maintenanceService.js maintenance record storage
         notificationMonitor.js in-process poller for inverter status transitions
         pushService.js        Web Push send/broadcast with failure pruning
+        geminiService.js      Google Gemini client for the solar assistant
     adapters/
         pythonAdapter.js      Node wrapper that spawns the Python UTL login helper
         python/utl_api.py     Python implementation of the UTL login flow
@@ -235,6 +237,14 @@ Current (implemented):
     the browser (`src/services/solarService.ts`) because the forecast endpoint is
     public and keyless.
 - **UTL Solar RMS API** — all solar/inverter data (see §7).
+- **Google Gemini (AI chat)** — `services/geminiService.js` calls the official
+  Generative Language API server-side via `fetch` for the `/api/ai/chat`
+  solar-assistant endpoint (`routes/ai.js`, behind `authMiddleware` plus a
+  per-IP rate limit). `GEMINI_API_KEY`/`GEMINI_MODEL` are backend-only env
+  vars; the key is never logged or sent to the client. Conversation history is
+  kept in frontend state only. Phase 1 is generic chat; a later phase will
+  inject real EnergyScope context through
+  `geminiService.buildSystemInstruction()`.
 
 Note: the historical rule "frontend never talks to the weather provider" is no
 longer strictly true for the public, keyless Open-Meteo forecast endpoint. Any

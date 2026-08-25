@@ -20,6 +20,7 @@ const archiveRouter = require("./routes/archive");
 const authRouter = require("./routes/auth");
 const healthRouter = require("./routes/health");
 const notificationsRouter = require("./routes/notifications");
+const aiRouter = require("./routes/ai");
 const { createMonitor } = require("./services/notificationMonitor");
 const { authMiddleware } = require("./middleware/auth");
 const requiredEnv = [
@@ -88,6 +89,7 @@ app.use("/api/prediction", authMiddleware, predictionRouter);
 app.use("/api/maintenance", authMiddleware, maintenanceRouter);
 app.use("/api/archive", authMiddleware, archiveRouter);
 app.use("/api/notifications", authMiddleware, notificationsRouter);
+app.use("/api/ai", authMiddleware, aiRouter);
 
 app.use("/api/health", healthRouter);
 app.use("/api", configRouter);

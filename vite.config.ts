@@ -1,9 +1,11 @@
+import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig, type Plugin, type UserConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { nitro } from "nitro/vite";
 import { VitePWA } from "vite-plugin-pwa";
+import path from "node:path";
 
 // Nitro's vite integration disables Vite's native public/ copy for the
 // client environment (nitro:env sets `copyPublicDir ??= false`) and only
@@ -90,7 +92,10 @@ const vitePWAs: Plugin[] = VitePWA({
 
 const config: UserConfig = {
   resolve: {
-    dedupe: [
+  alias: {
+    "@": new URL("./src", import.meta.url).pathname,
+  },
+  dedupe: [
       "react",
       "react-dom",
       "react/jsx-runtime",
@@ -104,9 +109,10 @@ const config: UserConfig = {
   },
 
   plugins: [
-    clientPublicCopy(),
+  clientPublicCopy(),
+  tsconfigPaths(),
 
-    tailwindcss(),
+  tailwindcss(),
 
     tanstackStart({
       server: {
