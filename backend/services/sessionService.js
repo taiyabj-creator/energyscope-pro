@@ -6,10 +6,7 @@ function encryptPassword(password) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", KEY, iv);
 
-  const encrypted = Buffer.concat([
-    cipher.update(password, "utf8"),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(password, "utf8"), cipher.final()]);
 
   const tag = cipher.getAuthTag();
 
@@ -23,11 +20,7 @@ function encryptPassword(password) {
 function decryptPassword(payload) {
   const parsed = JSON.parse(payload);
 
-  const decipher = crypto.createDecipheriv(
-    "aes-256-gcm",
-    KEY,
-    Buffer.from(parsed.iv, "hex")
-  );
+  const decipher = crypto.createDecipheriv("aes-256-gcm", KEY, Buffer.from(parsed.iv, "hex"));
 
   decipher.setAuthTag(Buffer.from(parsed.tag, "hex"));
 
@@ -85,16 +78,16 @@ function createSession(sessionId, data) {
   const now = Date.now();
 
   insertStmt.run(
-  sessionId,
-  data.email,
-  encryptPassword(data.password),
-  data.device_id,
-  data.utlToken,
-  data.expiresAt,
-  now,
-  now,
-  data.remember_me ? 1 : 0
-);
+    sessionId,
+    data.email,
+    encryptPassword(data.password),
+    data.device_id,
+    data.utlToken,
+    data.expiresAt,
+    now,
+    now,
+    data.remember_me ? 1 : 0,
+  );
 
   console.log("Session created.");
 }
@@ -114,15 +107,15 @@ function getSession(sessionId) {
   touchStmt.run(Date.now(), sessionId);
 
   return {
-  email: row.email,
-  password: decryptPassword(row.password_encrypted),
-  device_id: row.device_id,
-  utlToken: row.utl_token,
-  expiresAt: row.expires_at,
-  createdAt: row.created_at,
-  lastUsedAt: Date.now(),
-  remember_me: Boolean(row.remember_me),
-};
+    email: row.email,
+    password: decryptPassword(row.password_encrypted),
+    device_id: row.device_id,
+    utlToken: row.utl_token,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    lastUsedAt: Date.now(),
+    remember_me: Boolean(row.remember_me),
+  };
 }
 
 function updateSession(sessionId, updates) {
@@ -138,15 +131,15 @@ function updateSession(sessionId, updates) {
   };
 
   updateStmt.run(
-  merged.email,
-  encryptPassword(merged.password),
-  merged.device_id,
-  merged.utlToken,
-  merged.expiresAt,
-  Date.now(),
-  merged.remember_me ? 1 : 0,
-  sessionId
-);
+    merged.email,
+    encryptPassword(merged.password),
+    merged.device_id,
+    merged.utlToken,
+    merged.expiresAt,
+    Date.now(),
+    merged.remember_me ? 1 : 0,
+    sessionId,
+  );
 
   return merged;
 }
@@ -157,15 +150,15 @@ function deleteSession(sessionId) {
 
 function cleanupExpiredSessions() {
   const result = db
-    .prepare(`
+    .prepare(
+      `
       DELETE FROM sessions
       WHERE expires_at <= ?
-    `)
+    `,
+    )
     .run(Date.now());
 
-  console.log(
-    `Session cleanup completed. Removed ${result.changes} expired session(s).`
-  );
+  console.log(`Session cleanup completed. Removed ${result.changes} expired session(s).`);
 
   return result.changes;
 }

@@ -68,39 +68,29 @@ export function EnergyChart() {
 
   const maxDay = today.toISOString().slice(0, 10);
 
-  const maxMonth =
-    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const maxMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
 
   const isAtLatest =
-    (range === "day" &&
-      selectedDate.toISOString().slice(0, 10) === maxDay) ||
+    (range === "day" && selectedDate.toISOString().slice(0, 10) === maxDay) ||
     (range === "month" &&
       selectedDate.getFullYear() === today.getFullYear() &&
       selectedDate.getMonth() === today.getMonth()) ||
-    (range === "year" &&
-      selectedDate.getFullYear() === today.getFullYear());
+    (range === "year" && selectedDate.getFullYear() === today.getFullYear());
 
   const unit = range === "day" ? "kW" : "kWh";
   const isBar = range !== "day";
-  
 
   return (
-  <div>
-    
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold sm:text-lg">
-            Generation profile
-          </h2>
+          <h2 className="text-base font-semibold sm:text-lg">Generation profile</h2>
           <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-            {range === "day"
-              ? "Instantaneous solar generation"
-              : "Energy yield from UTL history"}
+            {range === "day" ? "Instantaneous solar generation" : "Energy yield from UTL history"}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-
           <button
             type="button"
             onClick={() => {
@@ -113,57 +103,55 @@ export function EnergyChart() {
               setSelectedDate(d);
             }}
             disabled={range === "total"}
-            
+
             className="rounded-lg border border-border px-2 py-2 disabled:opacity-40"
           >
             <ChevronLeft className="size-4" />
-        
-              
-</button>
+          </button>
 
-<input
-  type={
-    range === "day"
-      ? "date"
-      : range === "month"
-      ? "month"
-      : range === "year"
-      ? "number"
-      : "text"
-  }
-  disabled={range === "total"}
-  min={range === "year" ? "2000" : undefined}
-  max={
-    range === "day"
-      ? maxDay
-      : range === "month"
-      ? maxMonth
-      : range === "year"
-      ? String(today.getFullYear())
-      : undefined
-  }
-  value={
-    range === "day"
-      ? selectedDate.toISOString().slice(0, 10)
-      : range === "month"
-      ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}`
-      : range === "year"
-      ? String(selectedDate.getFullYear())
-      : "Lifetime"
-  }
-  onChange={(e) => {
-    if (range === "day") {
-      setSelectedDate(new Date(e.target.value));
-    } else if (range === "month") {
-      setSelectedDate(new Date(`${e.target.value}-01T00:00:00`));
-    } else if (range === "year") {
-      setSelectedDate(new Date(Number(e.target.value), 0, 1));
-    }
-  }}
-  className="rounded-xl border border-border bg-card px-3 py-2 text-sm"
-/>
+          <input
+            type={
+              range === "day"
+                ? "date"
+                : range === "month"
+                  ? "month"
+                  : range === "year"
+                    ? "number"
+                    : "text"
+            }
+            disabled={range === "total"}
+            min={range === "year" ? "2000" : undefined}
+            max={
+              range === "day"
+                ? maxDay
+                : range === "month"
+                  ? maxMonth
+                  : range === "year"
+                    ? String(today.getFullYear())
+                    : undefined
+            }
+            value={
+              range === "day"
+                ? selectedDate.toISOString().slice(0, 10)
+                : range === "month"
+                  ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}`
+                  : range === "year"
+                    ? String(selectedDate.getFullYear())
+                    : "Lifetime"
+            }
+            onChange={(e) => {
+              if (range === "day") {
+                setSelectedDate(new Date(e.target.value));
+              } else if (range === "month") {
+                setSelectedDate(new Date(`${e.target.value}-01T00:00:00`));
+              } else if (range === "year") {
+                setSelectedDate(new Date(Number(e.target.value), 0, 1));
+              }
+            }}
+            className="rounded-xl border border-border bg-card px-3 py-2 text-sm"
+          />
 
-         <button
+          <button
             type="button"
             onClick={() => {
               const d = new Date(selectedDate);
@@ -193,31 +181,23 @@ export function EnergyChart() {
                 onClick={() => setRange(r.key)}
                 className={cn(
                   "rounded-lg px-2.5 py-1.5 text-[11px] font-medium",
-                  range === r.key
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground"
+                  range === r.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
                 )}
               >
                 {r.label}
               </button>
             ))}
           </div>
-
         </div>
       </div>
-      
 
       <div className="h-[300px] w-full">
         {isLoading || !data ? (
           <Skeleton className="h-full w-full" />
         ) : (
-                   <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={300}>
             {isBar ? (
-              <BarChart
-  data={data}
-  barCategoryGap={range === "month" ? "25%" : "70%"}
-  barGap={0}
->
+              <BarChart data={data} barCategoryGap={range === "month" ? "25%" : "70%"} barGap={0}>
                 <CartesianGrid stroke="#444" />
                 <XAxis dataKey="label" {...AXIS} />
                 <YAxis {...AXIS} />
@@ -225,12 +205,12 @@ export function EnergyChart() {
                 <Legend />
 
                 <Bar
-  dataKey="value"
-  name="Energy"
-  fill="var(--solar)"
-  radius={[6, 6, 0, 0]}
-  maxBarSize={range === "month" ? 42 : 120}
-/>
+                  dataKey="value"
+                  name="Energy"
+                  fill="var(--solar)"
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={range === "month" ? 42 : 120}
+                />
               </BarChart>
             ) : (
               <AreaChart data={data}>

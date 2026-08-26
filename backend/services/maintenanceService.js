@@ -19,9 +19,7 @@ function addDays(dateString, days) {
 }
 
 function daysBetween(date) {
-  return Math.ceil(
-    (date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  );
+  return Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 function scoreFromDueDays(daysRemaining, interval) {
   if (daysRemaining >= interval * 0.5) return 100;
@@ -49,10 +47,7 @@ async function getMaintenance() {
   const cleaningScore = scoreFromDueDays(cleaningDueIn, 60);
   const inspectionScore = scoreFromDueDays(inspectionDueIn, 180);
 
-  const healthScore = Math.round(
-      cleaningScore * 0.5 +
-     inspectionScore * 0.5
-)   ;
+  const healthScore = Math.round(cleaningScore * 0.5 + inspectionScore * 0.5);
 
   return {
     lastCleaning: data.lastCleaning,
@@ -64,9 +59,7 @@ async function getMaintenance() {
     inspectionDueIn,
     healthScore,
 
-    history: (data.history ?? []).sort(
-      (a, b) => new Date(b.date) - new Date(a.date)
-    ),
+    history: (data.history ?? []).sort((a, b) => new Date(b.date) - new Date(a.date)),
   };
 }
 

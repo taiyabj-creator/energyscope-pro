@@ -1,72 +1,58 @@
-const {
-  getPlantStatus,
-  utlFetch,
-} = require("./utlApi");
+const { getPlantStatus, utlFetch } = require("./utlApi");
+const { istDateString } = require("./archiveService");
 
 function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 async function postChart(jwtToken, session, endpoint, dateParameter = null) {
-  const plantStatus = await getPlantStatus(
-  jwtToken,
-  session
-);
-console.log(
-  "Plant status response:",
-  JSON.stringify(plantStatus, null, 2)
-);
+  const plantStatus = await getPlantStatus(jwtToken, session);
+  console.log("Plant status response:", JSON.stringify(plantStatus, null, 2));
 
-const plantId =
-  plantStatus?.data?.total?.plantIds?.[0];
+  const plantId = plantStatus?.data?.total?.plantIds?.[0];
 
-if (!plantId) {
-  throw new Error("Plant ID missing.");
-}
+  if (!plantId) {
+    throw new Error("Plant ID missing.");
+  }
 
-const body = {
-  plant_id: plantId,
-};
+  const body = {
+    plant_id: plantId,
+  };
 
   if (dateParameter) {
     body.date_parameter = dateParameter;
   }
 
   const response = await utlFetch(
-  jwtToken,
-  session,
-  `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+    jwtToken,
+    session,
+    `https://utlsolarrms.com/api/charts/solar_power_per_plant/${endpoint}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  }
-);
+  );
 
-console.log("Chart status:", response.status);
+  console.log("Chart status:", response.status);
 
-const text = await response.text();
+  const text = await response.text();
 
-console.log("Chart response:", text);
+  console.log("Chart response:", text);
 
-return JSON.parse(text);
+  return JSON.parse(text);
 }
 
-async function getExportData(
-  jwtToken,
-  session,
-  month,
-  year
-){
-  const today = new Date().toISOString().slice(0, 10);
+async function getExportData(jwtToken, session, month, year) {
+  const today = istDateString(new Date());
 
   const [daily, monthly, yearly, total] = await Promise.all([
     postChart(jwtToken, session, "daily", today),
-postChart(jwtToken, session, "monthly", month),
-postChart(jwtToken, session, "yearly", year),
-postChart(jwtToken, session, "total"),
+    postChart(jwtToken, session, "monthly", month),
+    postChart(jwtToken, session, "yearly", year),
+    postChart(jwtToken, session, "total"),
   ]);
 
   return {
@@ -77,11 +63,7 @@ postChart(jwtToken, session, "total"),
   };
 }
 
-async function getLast30DaysGeneration(
-  jwtToken,
-  session,
-  referenceDate = new Date()
-) {
+async function getLast30DaysGeneration(jwtToken, session, referenceDate = new Date()) {
   const monthsNeeded = new Set();
 
   // Look back 30 completed days (exclude today)
@@ -96,15 +78,10 @@ async function getLast30DaysGeneration(
 
   await Promise.all(
     [...monthsNeeded].map(async (month) => {
-      const response = await postChart(
-  jwtToken,
-  session,
-  "monthly",
-  month
-);
+      const response = await postChart(jwtToken, session, "monthly", month);
 
       monthResults.set(month, response.results ?? []);
-    })
+    }),
   );
 
   const history = [];

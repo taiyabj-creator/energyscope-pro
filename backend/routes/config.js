@@ -13,18 +13,12 @@ router.get("/plant-config", (req, res) => {
   res.json(data);
 });
 
-router.put(
-  "/plant-config",
-  authMiddleware,
-  (req, res) => {
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify(req.body, null, 2)
-  );
+router.put("/plant-config", authMiddleware, (req, res) => {
+  fs.writeFileSync(configPath, JSON.stringify(req.body, null, 2));
 
   res.json({
     success: true,
-    message: "Plant configuration updated."
+    message: "Plant configuration updated.",
   });
 });
 

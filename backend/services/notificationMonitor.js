@@ -15,10 +15,9 @@
  *    weather service is unreachable the sunset is computed astronomically
  *    from the plant coordinates (NOAA algorithm), so a third-party outage
  *    can never silently suppress the daily summary.
- *  - Daily energy: trapezoidal integration of the charts/daily WATT curve
- *    via archiveCollector.integratePowerCurveWh() -> Wh/1000 = kWh. If
- *    today's authoritative archive row already exists it is preferred
- *    verbatim. Values are NEVER multiplied by 1000.
+ *  - Daily energy: the authoritative UTL charts/monthly PvProduction (kWh
+ *    scalar per day). The same measured generation value the dashboard and
+ *    AI context use. NO daily power curve integration. NO archive fallback.
  *
  * NOTIFICATION RULES
  *
@@ -30,9 +29,11 @@
  * UNKNOWN (startup) never triggers a notification in either direction.
  * partiallyOffline counts as ONLINE (still producing).
  *
- * DAILY SUMMARY: one per plant per calendar day (Asia/Kolkata), persisted in
- * notifications.db BEFORE sending (claim-first), so restarts cannot double-
- * send. At-most-once semantics by design.
+ * DAILY SUMMARY: one per plant per calendar day (Asia/Kolkata), sent at
+ * approximately sunset + 1 hour IST. The sunset gate uses today's IST date,
+ * so at midnight the gate blocks (today's sunset hasn't happened yet).
+ * Persisted in notifications.db BEFORE sending (claim-first), so restarts
+ * cannot double-send. At-most-once semantics by design.
  */
 
 const collector = require("./archiveCollector");
@@ -126,49 +127,29 @@ async function fetchPlantStatus(session, deps = {}) {
   };
 }
 
-async function fetchDailyCurve(dateStr, session, deps = {}) {
+/**
+ * Fetch the UTL charts/monthly endpoint for a given month and return the
+ * parsed results array. This is the SAME authoritative endpoint the
+ * dashboard and AI context use for daily generation values.
+ */
+async function fetchMonthlyChart(summaryDate, session, deps = {}) {
   const api = deps.utlApi || utlApi;
+  const month = summaryDate.slice(0, 7);
   const response = await api.utlFetch(
     collector.COLLECTOR_SESSION_KEY,
     session,
-    `${UTL_BASE}/charts/solar_power_per_plant/daily`,
+    `${UTL_BASE}/charts/solar_power_per_plant/monthly`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         plant_id: Number(archiveService.PLANT_ID()),
-        date_parameter: dateStr,
+        date_parameter: month,
       }),
     },
   );
-  return JSON.parse(await response.text());
-}
-
-/**
- * Peak instantaneous power from the daily curve.
- * Samples are WATTS at `timeMinutes` past IST midnight.
- * Ties resolved to the EARLIEST occurrence. Returns null when no valid sample.
- */
-function computePeak(curveResults) {
-  if (!Array.isArray(curveResults)) return null;
-  let best = null;
-  for (const r of curveResults) {
-    const t = Number(r?.timeMinutes);
-    const p = Number(r?.PvProduction);
-    if (!Number.isFinite(t) || !Number.isFinite(p)) continue;
-    if (best === null || p > best.watts) best = { watts: p, timeMinutes: t };
-  }
-  if (best === null || best.watts <= 0) return null;
-  // timeMinutes is minutes past Asia/Kolkata midnight; render directly as
-  // IST wall-clock in 12-hour form (no Date/timezone round-trip needed).
-  const h24 = Math.floor(best.timeMinutes / 60);
-  const mins = Math.round(best.timeMinutes % 60);
-  const ampm = h24 >= 12 ? "PM" : "AM";
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return {
-    kw: best.watts / 1000, // W -> kW
-    timeLabel: `${h12}:${String(mins).padStart(2, "0")} ${ampm}`,
-  };
+  const json = JSON.parse(await response.text());
+  return Array.isArray(json?.results) ? json.results : [];
 }
 
 /**
@@ -186,8 +167,8 @@ function computeRank(todayKwh, archivedRows) {
   return 1 + others.filter((v) => v > todayKwh + 1e-9).length;
 }
 
-/** Build the three-paragraph daily summary body. */
-function buildSummaryBody({ todayKwh, rank, peak }) {
+/** Build the two-paragraph daily summary body. */
+function buildSummaryBody({ todayKwh, rank }) {
   const lines = [];
   lines.push(
     Number.isFinite(todayKwh)
@@ -198,11 +179,6 @@ function buildSummaryBody({ todayKwh, rank, peak }) {
     rank === null
       ? "Production rank: Not enough historical data yet."
       : `Today's production ranked #${rank} among all recorded production days.`,
-  );
-  lines.push(
-    peak
-      ? `Today's peak power: ${peak.kw.toFixed(2)} kW at ${peak.timeLabel}.`
-      : "Peak power data was unavailable today.",
   );
   return lines.join("\n\n");
 }
@@ -304,10 +280,9 @@ function createMonitor(overrides = {}) {
     log("Plant absent from all status lists; no state change.");
   }
 
-  /** Sunset instant (Date) for the current IST calendar day. */
-  async function getTodaySunset() {
-    const todayIst = deps.archive.istDateString(deps.now());
-    const cached = getState(deps.db, `sunset_${todayIst}`);
+  /** Sunset instant (Date) for the given IST calendar date. */
+  async function getTodaySunset(summaryDate) {
+    const cached = getState(deps.db, `sunset_${summaryDate}`);
     if (cached) return new Date(Number(cached));
 
     let sunset;
@@ -316,12 +291,12 @@ function createMonitor(overrides = {}) {
       if (!weather?.sunset) throw new Error("no sunset field in response");
       sunset = new Date(weather.sunset); // open-meteo returns ISO with offset
       if (Number.isNaN(sunset.getTime())) throw new Error("invalid sunset value");
-      log(`Sunset for ${todayIst}: ${istTimeString(sunset)} IST (weather service).`);
+      log(`Sunset for ${summaryDate}: ${istTimeString(sunset)} IST (weather service).`);
     } catch (err) {
       // A third-party outage must never suppress the daily summary: fall back
       // to astronomical computation from the plant coordinates.
       try {
-        sunset = computeSunsetUtc(todayIst, deps.lat, deps.lon);
+        sunset = computeSunsetUtc(summaryDate, deps.lat, deps.lon);
         log(
           `WARN Weather unavailable (${err.message}); using computed sunset ${istTimeString(sunset)} IST.`,
         );
@@ -331,62 +306,63 @@ function createMonitor(overrides = {}) {
     }
 
     // Cache per IST day so we query at most once per day.
-    setState(deps.db, `sunset_${todayIst}`, String(sunset.getTime()));
+    setState(deps.db, `sunset_${summaryDate}`, String(sunset.getTime()));
     return sunset;
   }
 
   /**
-   * Daily energy for the current IST day, in kWh:
-   *  - prefer today's authoritative archive row when present;
-   *  - otherwise integrate today's live WATT curve (Wh/1000) WITHOUT writing
-   *    to the archive (the 06:00 collector remains the archival authority).
-   * Returns {kwh, peak} or null when nothing usable exists.
+   * Authoritative generation for the given IST date, in kWh.
+   * Fetches charts/monthly (the same UTL endpoint the dashboard and AI
+   * context use) and selects the exact day's PvProduction scalar.
+   * Returns { kwh } or null when no authoritative row exists.
    */
-  async function buildDailyFigures(todayIst, session) {
-    let kwh = null;
-    let curveResults = null;
-
-    const archiveRow = deps.archive
-      .getDailyRecords({ date: todayIst })
-      .find((r) => String(r.plant_id) === String(deps.archive.PLANT_ID()));
-    if (archiveRow && Number.isFinite(Number(archiveRow.generation_kwh))) {
-      kwh = Number(archiveRow.generation_kwh);
-    }
-
+  async function buildDailyFigures(summaryDate, session) {
+    let results;
     try {
-      const curveJson = await fetchDailyCurve(todayIst, session, { utlApi: deps.utlApi });
-      curveResults = Array.isArray(curveJson?.results) ? curveJson.results : null;
-      if (curveResults && kwh === null) {
-        const integration = deps.collector.integratePowerCurveWh(curveResults);
-        if (integration && integration.pointsCount > 0) {
-          kwh = integration.wattHours / 1000; // Wh -> kWh
-        }
-      }
+      results = await fetchMonthlyChart(summaryDate, session, { utlApi: deps.utlApi });
     } catch (err) {
-      log(`Daily curve unavailable for summary (${err.message}).`);
+      log(`Monthly chart unavailable for summary (${err.message}).`);
+      return null;
     }
 
-    if (kwh === null && curveResults === null) return null;
-    return { kwh, peak: computePeak(curveResults) };
+    const dayNumber = Number(summaryDate.slice(8, 10));
+    const row = results.find((r) => Number(r.date) === dayNumber);
+    if (!row) {
+      log(`No monthly-chart row for day ${dayNumber} in ${summaryDate.slice(0, 7)}.`);
+      return null;
+    }
+
+    const kwh = Number(row.PvProduction);
+    if (!Number.isFinite(kwh)) {
+      log(`Non-numeric PvProduction for ${summaryDate}: ${JSON.stringify(row.PvProduction)}.`);
+      return null;
+    }
+
+    return { kwh };
   }
 
   async function maybeSendDailySummary() {
     const db = deps.db;
     const now = deps.now();
-    const todayIst = deps.archive.istDateString(now);
+    const nowIst = deps.archive.istDateString(now);
 
-    // Already sent today? Idempotency ledger is the single gate.
+    // Summarize today's IST calendar date. The sunset + 1h gate ensures
+    // we only fire after the solar day has closed; at midnight the gate
+    // blocks because today's sunset hasn't happened yet.
+    const summaryDate = nowIst;
+
+    // Already sent for this date? Idempotency ledger is the single gate.
     const already = db
       .prepare("SELECT 1 FROM daily_summary_sent WHERE plant_id = ? AND generation_date = ?")
-      .get(deps.archive.PLANT_ID(), todayIst);
+      .get(deps.archive.PLANT_ID(), summaryDate);
     if (already) return;
 
-    log(`Summary triggered for ${todayIst}.`);
+    log(`Summary triggered for ${summaryDate}.`);
 
-    // Determine production close = sunset + 1h.
+    // Determine production close = sunset of the summary date + 1h.
     let closeAt;
     try {
-      const sunset = await getTodaySunset();
+      const sunset = await getTodaySunset(summaryDate);
       closeAt = new Date(sunset.getTime() + 60 * 60 * 1000);
     } catch (err) {
       log(`Cannot determine sunset yet: ${err.message}`);
@@ -408,40 +384,42 @@ function createMonitor(overrides = {}) {
       return;
     }
 
-    const figures = await buildDailyFigures(todayIst, session);
+    // Fetch the authoritative UTL monthly chart for the summary date.
+    const figures = await buildDailyFigures(summaryDate, session);
     if (!figures) {
-      log("No usable data for daily summary; will retry next tick.");
+      log("No authoritative UTL generation data for summary; will retry next tick.");
       return;
     }
 
-    log(`Summary generated for ${todayIst}: ${Number.isFinite(figures.kwh) ? figures.kwh.toFixed(2) : "unavailable"} kWh.`);
+    log(`Summary generated for ${summaryDate}: ${figures.kwh.toFixed(2)} kWh.`);
 
     const archivedRows = deps.archive
       .getDailyRecords({})
-      .filter((r) => r.generation_date !== todayIst);
-    const rank = computeRank(figures.kwh ?? NaN, archivedRows);
+      .filter((r) => r.generation_date !== summaryDate);
+    const rank = computeRank(figures.kwh, archivedRows);
 
     // Claim FIRST (idempotency), then send. A crash between claim and send
     // results in at-most-once delivery, never duplicates.
     db.prepare(
       "INSERT INTO daily_summary_sent (plant_id, generation_date, sent_at, generation_kwh) VALUES (?, ?, ?, ?)",
-    ).run(deps.archive.PLANT_ID(), todayIst, Date.now(), figures.kwh ?? null);
+    ).run(deps.archive.PLANT_ID(), summaryDate, Date.now(), figures.kwh);
 
     try {
       await deps.sendPush({
         kind: "daily_summary",
         title: "EnergyScope — Daily Production Summary",
-        body: buildSummaryBody({ todayKwh: figures.kwh ?? NaN, rank, peak: figures.peak }),
+        body: buildSummaryBody({ todayKwh: figures.kwh, rank }),
         url: "/history",
       });
-      log(`Summary sent for ${todayIst}.`);
+      log(`Summary sent for ${summaryDate}.`);
     } catch (err) {
-      log(`Summary failed for ${todayIst}: ${err.message}`);
+      log(`Summary failed for ${summaryDate}: ${err.message}`);
       // Roll back the claim so the next tick can retry delivery.
       try {
-        db.prepare(
-          "DELETE FROM daily_summary_sent WHERE plant_id = ? AND generation_date = ?",
-        ).run(deps.archive.PLANT_ID(), todayIst);
+        db.prepare("DELETE FROM daily_summary_sent WHERE plant_id = ? AND generation_date = ?").run(
+          deps.archive.PLANT_ID(),
+          summaryDate,
+        );
       } catch (_) {
         // Best-effort cleanup; if it fails the summary will be retried on
         // the next server restart via the same idempotency gate.
@@ -501,10 +479,10 @@ function createMonitor(overrides = {}) {
 
 /**
  * Build (but do not send) the daily-summary payload for a given IST date.
- * Used by the dev-only test endpoint and tests. Respects idempotency unless
- * { force: true }.
+ * Used by the dev-only test endpoint and tests.
+ * The summaryDate parameter defaults to today's IST date.
  */
-async function buildDailySummaryPayload(options = {}) {
+async function buildDailySummaryPayload(summaryDate, options = {}) {
   const deps = {
     db: options.db || require("../data/notificationDatabase"),
     push: options.push || pushService,
@@ -513,29 +491,28 @@ async function buildDailySummaryPayload(options = {}) {
     collector: options.collector || collector,
     archive: options.archive || archiveService,
   };
-  const todayIst = options.dateIst || deps.archive.istDateString(new Date());
+  const resolvedDate = summaryDate || deps.archive.istDateString(new Date());
   const session = await deps.collector.ensureCollectorSession();
 
   const monitor = createMonitor({ ...options, db: deps.db });
-  const figures = await monitor._internals.buildDailyFigures(todayIst, session);
+  const figures = await monitor._internals.buildDailyFigures(resolvedDate, session);
   if (!figures) return null;
 
   const archivedRows = deps.archive
     .getDailyRecords({})
-    .filter((r) => r.generation_date !== todayIst);
-  const rank = computeRank(figures.kwh ?? NaN, archivedRows);
+    .filter((r) => r.generation_date !== resolvedDate);
+  const rank = computeRank(figures.kwh, archivedRows);
 
   return {
     kind: "daily_summary",
     title: "EnergyScope — Daily Production Summary",
-    body: buildSummaryBody({ todayKwh: figures.kwh ?? NaN, rank, peak: figures.peak }),
+    body: buildSummaryBody({ todayKwh: figures.kwh, rank }),
     url: "/history",
   };
 }
 
 module.exports = {
   createMonitor,
-  computePeak,
   computeRank,
   buildSummaryBody,
   istTimeString,

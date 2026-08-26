@@ -30,11 +30,9 @@ export function AnimatedNumber({
 
       const progress = frame / totalFrames;
 
-      const eased =
-        1 - Math.pow(1 - progress, 3);
+      const eased = 1 - Math.pow(1 - progress, 3);
 
-      const current =
-        start + (end - start) * eased;
+      const current = start + (end - start) * eased;
 
       setDisplay(current);
 

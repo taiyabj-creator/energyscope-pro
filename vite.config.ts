@@ -92,10 +92,10 @@ const vitePWAs: Plugin[] = VitePWA({
 
 const config: UserConfig = {
   resolve: {
-  alias: {
-    "@": new URL("./src", import.meta.url).pathname,
-  },
-  dedupe: [
+    alias: {
+      "@": new URL("./src", import.meta.url).pathname,
+    },
+    dedupe: [
       "react",
       "react-dom",
       "react/jsx-runtime",
@@ -109,10 +109,10 @@ const config: UserConfig = {
   },
 
   plugins: [
-  clientPublicCopy(),
-  tsconfigPaths(),
+    clientPublicCopy(),
+    tsconfigPaths(),
 
-  tailwindcss(),
+    tailwindcss(),
 
     tanstackStart({
       server: {

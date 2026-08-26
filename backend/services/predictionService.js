@@ -10,7 +10,7 @@ function predictDailyEnergy({
   let weatherFactor = 1;
 
   // Cloud cover penalty
-  if (cloudCover >= 80) weatherFactor -= 0.20;
+  if (cloudCover >= 80) weatherFactor -= 0.2;
   else if (cloudCover >= 60) weatherFactor -= 0.12;
   else if (cloudCover >= 40) weatherFactor -= 0.07;
   else if (cloudCover >= 20) weatherFactor -= 0.03;
@@ -22,33 +22,25 @@ function predictDailyEnergy({
 
   // Weather type
   if (weatherCode === 3) weatherFactor -= 0.08;
-  else if ([61,63,65,80,81,82].includes(weatherCode))
-    weatherFactor -= 0.15;
-  else if ([95,96,99].includes(weatherCode))
-    weatherFactor -= 0.22;
+  else if ([61, 63, 65, 80, 81, 82].includes(weatherCode)) weatherFactor -= 0.15;
+  else if ([95, 96, 99].includes(weatherCode)) weatherFactor -= 0.22;
 
   // UV adjustment
   if (uvIndex >= 9) weatherFactor += 0.03;
   else if (uvIndex < 3) weatherFactor -= 0.05;
 
-  weatherFactor = Math.max(0.60, Math.min(1.05, weatherFactor));
+  weatherFactor = Math.max(0.6, Math.min(1.05, weatherFactor));
 
   // Daily forecast (fixed for the day)
-  const expectedToday = Number(
-    (monthAverage * weatherFactor).toFixed(2)
-  );
+  const expectedToday = Number((monthAverage * weatherFactor).toFixed(2));
 
-  const difference = Number(
-    (currentEnergy - expectedToday).toFixed(2)
-  );
+  const difference = Number((currentEnergy - expectedToday).toFixed(2));
 
-  const forecastPercent = Number(
-    ((currentEnergy / expectedToday) * 100).toFixed(1)
-  );
+  const forecastPercent = Number(((currentEnergy / expectedToday) * 100).toFixed(1));
 
   let confidence = "High";
-  if (weatherFactor < 0.70) confidence = "Low";
-  else if (weatherFactor < 0.90) confidence = "Medium";
+  if (weatherFactor < 0.7) confidence = "Low";
+  else if (weatherFactor < 0.9) confidence = "Medium";
 
   return {
     currentEnergy,
@@ -57,10 +49,7 @@ function predictDailyEnergy({
 
     difference,
 
-    differenceLabel:
-      difference >= 0
-        ? "Above forecast"
-        : "Below forecast",
+    differenceLabel: difference >= 0 ? "Above forecast" : "Below forecast",
 
     forecastPercent,
 

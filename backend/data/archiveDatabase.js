@@ -7,9 +7,7 @@ const DATA_DIR = __dirname;
 function resolveDbPath() {
   const configured = process.env.ARCHIVE_DB_PATH;
   if (configured && configured.trim()) {
-    return path.isAbsolute(configured)
-      ? configured
-      : path.join(DATA_DIR, configured);
+    return path.isAbsolute(configured) ? configured : path.join(DATA_DIR, configured);
   }
   return path.join(DATA_DIR, "archive.db");
 }

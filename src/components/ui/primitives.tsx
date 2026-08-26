@@ -38,7 +38,9 @@ export function PanelHeading({
     <div className="mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
       <div className="min-w-0">
         <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
-        {subtitle ? <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{subtitle}</p> : null}
+        {subtitle ? (
+          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{subtitle}</p>
+        ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -62,7 +64,7 @@ export function StatusDot({ status }: { status: "online" | "offline" | "warning"
       className={cn(
         "inline-block size-2 shrink-0 rounded-full",
         tone,
-        status === "offline" && "animate-pulse"
+        status === "offline" && "animate-pulse",
       )}
     />
   );

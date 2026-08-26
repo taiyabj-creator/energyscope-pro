@@ -3,11 +3,7 @@ import { useState } from "react";
 import { CalendarCheck, Droplets, HeartPulse, Wrench } from "lucide-react";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
-import {
-  useMaintenance,
-  usePlantInfo,
-  useUpdateMaintenance,
-} from "@/hooks/useSolarData";
+import { useMaintenance, usePlantInfo, useUpdateMaintenance } from "@/hooks/useSolarData";
 import { formatDate, plantAge } from "@/utils/format";
 import { cn } from "@/lib/utils";
 
@@ -30,23 +26,23 @@ export const Route = createFileRoute("/maintenance")({
   component: MaintenancePage,
 });
 
-        const typeStyle = {
-       cleaning: "bg-primary/12 text-primary",
-       inspection: "bg-warning/12 text-warning",
-       repair: "bg-destructive/12 text-destructive",
-       installation: "bg-positive/12 text-positive",
-        } as const;
+const typeStyle = {
+  cleaning: "bg-primary/12 text-primary",
+  inspection: "bg-warning/12 text-warning",
+  repair: "bg-destructive/12 text-destructive",
+  installation: "bg-positive/12 text-positive",
+} as const;
 
-      function MaintenancePage() {
-       const { data } = useMaintenance();
-      const updateMaintenance = useUpdateMaintenance();
+function MaintenancePage() {
+  const { data } = useMaintenance();
+  const updateMaintenance = useUpdateMaintenance();
 
-        const { data: plant } = usePlantInfo();
+  const { data: plant } = usePlantInfo();
 
-       const [cleaningDate, setCleaningDate] = useState("");
-       const [inspectionDate, setInspectionDate] = useState("");
+  const [cleaningDate, setCleaningDate] = useState("");
+  const [inspectionDate, setInspectionDate] = useState("");
 
-       const age = plantAge(plant?.installationDate ?? new Date().toISOString());
+  const age = plantAge(plant?.installationDate ?? new Date().toISOString());
 
   return (
     <div className="space-y-6">
@@ -58,26 +54,26 @@ export const Route = createFileRoute("/maintenance")({
           footnote={plant ? `Commissioned ${formatDate(plant.installationDate)}` : ""}
         />
         <MetricCard
-            title="Last cleaning"
-             value={data ? formatDate(data.lastCleaning, { day: "2-digit", month: "short" }) : "—"}
-             icon={Droplets}
-             tone="load"
-             footnote={
-              data
+          title="Last cleaning"
+          value={data ? formatDate(data.lastCleaning, { day: "2-digit", month: "short" }) : "—"}
+          icon={Droplets}
+          tone="load"
+          footnote={
+            data
               ? `Next: ${formatDate(data.nextCleaning)} (${data.cleaningDueIn >= 0 ? `${data.cleaningDueIn} days left` : `${Math.abs(data.cleaningDueIn)} days overdue`})`
-             : "Loading..."
-             }
+              : "Loading..."
+          }
         />
         <MetricCard
-           title="Last inspection"
-           value={data ? formatDate(data.lastInspection, { day: "2-digit", month: "short" }) : "—"}
-           icon={Wrench}
+          title="Last inspection"
+          value={data ? formatDate(data.lastInspection, { day: "2-digit", month: "short" }) : "—"}
+          icon={Wrench}
           tone="grid"
-           footnote={
+          footnote={
             data
-           ? `Next: ${formatDate(data.nextInspection)} (${data.inspectionDueIn >= 0 ? `${data.inspectionDueIn} days left` : `${Math.abs(data.inspectionDueIn)} days overdue`})`
-           : "Loading..."
-           }
+              ? `Next: ${formatDate(data.nextInspection)} (${data.inspectionDueIn >= 0 ? `${data.inspectionDueIn} days left` : `${Math.abs(data.inspectionDueIn)} days overdue`})`
+              : "Loading..."
+          }
         />
         <MetricCard
           title="Plant health score"
@@ -88,19 +84,13 @@ export const Route = createFileRoute("/maintenance")({
           footnote="Weather-adjusted, advisory only"
         />
       </div>
-       
-             <Panel delay={0.05}>
-        <PanelHeading
-          title="Maintenance Records"
-          subtitle="Update service dates"
-        />
+
+      <Panel delay={0.05}>
+        <PanelHeading title="Maintenance Records" subtitle="Update service dates" />
 
         <div className="space-y-6">
-
           <div>
-            <label className="mb-2 block text-sm font-medium">
-              Last Cleaning
-            </label>
+            <label className="mb-2 block text-sm font-medium">Last Cleaning</label>
 
             <div className="flex gap-3">
               <input
@@ -125,9 +115,7 @@ export const Route = createFileRoute("/maintenance")({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
-              Last Inspection
-            </label>
+            <label className="mb-2 block text-sm font-medium">Last Inspection</label>
 
             <div className="flex gap-3">
               <input
@@ -150,12 +138,14 @@ export const Route = createFileRoute("/maintenance")({
               </button>
             </div>
           </div>
-
         </div>
       </Panel>
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.3fr]">
         <Panel delay={0.1}>
-          <PanelHeading title="Health score breakdown" subtitle="Weighted factors behind the score" />
+          <PanelHeading
+            title="Health score breakdown"
+            subtitle="Weighted factors behind the score"
+          />
           {!data ? (
             <Skeleton className="h-52 w-full" />
           ) : (

@@ -14,10 +14,7 @@ function authMiddleware(req, res, next) {
   const token = header.replace("Bearer ", "");
 
   try {
-    const payload = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
 
     const session = sessionService.getSession(token);
 

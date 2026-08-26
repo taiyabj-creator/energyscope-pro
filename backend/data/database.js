@@ -8,9 +8,7 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const db = new Database(
-  path.join(dataDir, "sessions.db")
-);
+const db = new Database(path.join(dataDir, "sessions.db"));
 
 db.pragma("journal_mode = WAL");
 

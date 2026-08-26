@@ -5,9 +5,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { login } = require("./services/utlApi");
-const {
-  cleanupExpiredSessions,
-} = require("./services/sessionService");
+const { cleanupExpiredSessions } = require("./services/sessionService");
 
 const chartsRouter = require("./routes/charts");
 const configRouter = require("./routes/config");
@@ -23,15 +21,11 @@ const notificationsRouter = require("./routes/notifications");
 const aiRouter = require("./routes/ai");
 const { createMonitor } = require("./services/notificationMonitor");
 const { authMiddleware } = require("./middleware/auth");
-const requiredEnv = [
-  "JWT_SECRET",
-];
+const requiredEnv = ["JWT_SECRET"];
 
 for (const variable of requiredEnv) {
   if (!process.env[variable]) {
-    console.error(
-      `Missing required environment variable: ${variable}`
-    );
+    console.error(`Missing required environment variable: ${variable}`);
     process.exit(1);
   }
 }
@@ -50,20 +44,16 @@ const loginLimiter = rateLimit({
 
 app.use(
   cors({
-        origin: [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://localhost:8080",
-  "http://127.0.0.1:8080",
-  "http://192.168.29.58:8080",
-],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "x-device-id",
+    origin: [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:8080",
+      "http://127.0.0.1:8080",
+      "http://192.168.29.58:8080",
     ],
-  })
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-device-id"],
+  }),
 );
 app.use(helmet());
 app.use(express.json());
@@ -103,11 +93,14 @@ app.listen(PORT, async () => {
 
   cleanupExpiredSessions();
 
-  setInterval(() => {
-    cleanupExpiredSessions();
-  }, 30 * 60 * 1000);
+  setInterval(
+    () => {
+      cleanupExpiredSessions();
+    },
+    30 * 60 * 1000,
+  );
 
-    // Startup login removed.
+  // Startup login removed.
   // Authentication is performed through /api/auth/login when users sign in.
 
   // Background push-notification monitor runs inside this existing

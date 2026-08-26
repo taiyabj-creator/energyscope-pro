@@ -62,7 +62,10 @@ function ProfilePage() {
       </Panel>
 
       <Panel delay={0.05}>
-        <PanelHeading title="Lifetime summary" subtitle="Cumulative results for this installation" />
+        <PanelHeading
+          title="Lifetime summary"
+          subtitle="Cumulative results for this installation"
+        />
         <div className="grid grid-cols-2 gap-5">
           <Big label="Lifetime generation" value={`${lifetime.value} ${lifetime.unit}`} />
           <Big label="This year" value={`${(totals?.year ?? 0).toFixed(0)} kWh`} />

@@ -3,39 +3,24 @@ const router = express.Router();
 
 const { getExportData } = require("../services/exportService");
 
-const {
-  generateCsv,
-  generateExcel,
-} = require("../services/exportGenerator");
+const { generateCsv, generateExcel } = require("../services/exportGenerator");
 router.get("/csv", async (req, res) => {
   try {
     const now = new Date();
 
     const month =
-      req.query.month ||
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    const year =
-      req.query.year ||
-      String(now.getFullYear());
+    const year = req.query.year || String(now.getFullYear());
 
-    const data = await getExportData(
-  req.token,
-  req.session,
-  month,
-  year
-);
+    const data = await getExportData(req.token, req.session, month, year);
 
-const csv = generateCsv(data);
+    const csv = generateCsv(data);
 
-res.setHeader("Content-Type", "text/csv");
-res.setHeader(
-  "Content-Disposition",
-  'attachment; filename="utl-export.csv"'
-);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="utl-export.csv"');
 
-return res.send(csv);
-
+    return res.send(csv);
   } catch (err) {
     console.error(err);
 
@@ -51,34 +36,22 @@ router.get("/excel", async (req, res) => {
     const now = new Date();
 
     const month =
-      req.query.month ||
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    const year =
-      req.query.year ||
-      String(now.getFullYear());
+    const year = req.query.year || String(now.getFullYear());
 
-    const data = await getExportData(
-  req.token,
-  req.session,
-  month,
-  year
-);
+    const data = await getExportData(req.token, req.session, month, year);
 
     const excel = await generateExcel(data);
 
     res.setHeader(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
 
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="utl-export.xlsx"'
-    );
+    res.setHeader("Content-Disposition", 'attachment; filename="utl-export.xlsx"');
 
     return res.send(Buffer.from(excel));
-
   } catch (err) {
     console.error(err);
 

@@ -128,7 +128,7 @@ if (IS_DEV) {
     }
     if (kind === "summary") {
       try {
-        const payload = await notificationMonitor.buildDailySummaryPayload({});
+        const payload = await notificationMonitor.buildDailySummaryPayload(undefined, {});
         if (!payload) {
           return res
             .status(409)

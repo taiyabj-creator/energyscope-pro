@@ -4,57 +4,70 @@ const crypto = require("crypto");
 const pythonAdapter = require("../adapters/pythonAdapter");
 const sessionService = require("./sessionService");
 
-async function login(
-  email,
-  password,
-  rememberMe = true
-) {
-  const response = await pythonAdapter.login(email, password);
+async function login(email, password, rememberMe = true) {
+  let response;
 
- 
-
-  if (!response.success) {
-    throw new Error(response.message || "Invalid email or password.");
+  try {
+    response = await pythonAdapter.login(email, password);
+  } catch (err) {
+    console.error("Login: pythonAdapter failed:", err.message);
+    const e = new Error("AUTH_SERVICE_ERROR");
+    e.code = "AUTH_SERVICE_ERROR";
+    throw e;
   }
 
-  const dashboardToken = jwt.sign(
-    {
-      email,
-    },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: rememberMe ? "7d" : "12h",
-    }
-  );
+  if (!response.success) {
+    const e = new Error("INVALID_CREDENTIALS");
+    e.code = "INVALID_CREDENTIALS";
+    throw e;
+  }
 
-  // Convert values like "365d" into milliseconds
+  let dashboardToken;
+
+  try {
+    dashboardToken = jwt.sign({ email }, process.env.JWT_SECRET, {
+      expiresIn: rememberMe ? "7d" : "12h",
+    });
+  } catch (err) {
+    console.error("Login: JWT sign failed:", err.message);
+    const e = new Error("AUTH_SERVICE_ERROR");
+    e.code = "AUTH_SERVICE_ERROR";
+    throw e;
+  }
+
   const match = /^(\d+)d$/.exec(response.expires_in);
 
   if (!match) {
-    throw new Error(`Unsupported expires_in format: ${response.expires_in}`);
+    console.error("Login: unexpected expires_in format:", response.expires_in);
+    const e = new Error("AUTH_SERVICE_ERROR");
+    e.code = "AUTH_SERVICE_ERROR";
+    throw e;
   }
 
-  const expiresAt =
-    Date.now() + Number(match[1]) * 24 * 60 * 60 * 1000;
+  const expiresAt = Date.now() + Number(match[1]) * 24 * 60 * 60 * 1000;
 
-  console.log("Creating dashboard session...");
-
-sessionService.createSession(dashboardToken, {
-  email,
-  password,
-  device_id: crypto.randomUUID(),
-  utlToken: response.token,
-  expiresAt,
-  remember_me: rememberMe,
-});
-
-console.log("Dashboard session created.");
+  try {
+    sessionService.createSession(dashboardToken, {
+      email,
+      password,
+      device_id: crypto.randomUUID(),
+      utlToken: response.token,
+      expiresAt,
+      remember_me: rememberMe,
+    });
+  } catch (err) {
+    console.error("Login: session creation failed:", err.message);
+    const e = new Error("AUTH_SERVICE_ERROR");
+    e.code = "AUTH_SERVICE_ERROR";
+    throw e;
+  }
 
   return {
     success: true,
     token: dashboardToken,
   };
 }
+
 async function logout(token) {
   sessionService.deleteSession(token);
 }

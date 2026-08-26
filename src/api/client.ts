@@ -41,6 +41,16 @@ export function setRememberMe(enabled: boolean) {
   rememberMe = enabled;
 }
 
+export class ApiError extends Error {
+  code: string;
+
+  constructor(code: string) {
+    super(code);
+    this.name = "ApiError";
+    this.code = code;
+  }
+}
+
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const normalizedEndpoint = endpoint.startsWith("/api/")
     ? endpoint.slice(4)
@@ -67,9 +77,19 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
   });
 
   if (!response.ok) {
-    const text = await response.text();
+    let errorCode = "AUTH_SERVICE_ERROR";
 
-    throw new Error(`API Error ${response.status}: ${text || response.statusText}`);
+    try {
+      const body = await response.json();
+
+      if (body && typeof body.error === "string") {
+        errorCode = body.error;
+      }
+    } catch {
+      // Response was not JSON — keep default code.
+    }
+
+    throw new ApiError(errorCode);
   }
 
   return response.json();

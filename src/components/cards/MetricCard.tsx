@@ -32,7 +32,6 @@ export function MetricCard({
   footnote,
   loading,
   delay = 0,
-  
 }: {
   title: string;
   value: string | number;
@@ -43,14 +42,10 @@ export function MetricCard({
   footnote?: string;
   loading?: boolean;
   delay?: number;
-
 }) {
-  
   const numericValue = Number(value);
   const isNumeric = Number.isFinite(numericValue);
-  const decimals = isNumeric
-  ? numericValue.toString().split(".")[1]?.length ?? 0
-  : 0;
+  const decimals = isNumeric ? (numericValue.toString().split(".")[1]?.length ?? 0) : 0;
   return (
     <motion.article
       initial={{ opacity: 0, y: 16 }}
@@ -78,35 +73,29 @@ export function MetricCard({
       </div>
 
       <div className="relative mt-4 flex items-baseline gap-1.5">
-  {loading ? (
-    <Skeleton className="h-8 w-24" />
-  ) : (
-    <>
-      {isNumeric ? (
-        <span className="num text-3xl font-semibold">
-          <AnimatedNumber
-            value={numericValue}
-            decimals={
-  typeof value === "number"
-    ? (value.toString().split(".")[1]?.length ?? 0)
-    : (value.split(".")[1]?.length ?? 0)
-}
-          />
-        </span>
-      ) : (
-        <span className="num text-3xl font-semibold">
-          {value}
-        </span>
-      )}
+        {loading ? (
+          <Skeleton className="h-8 w-24" />
+        ) : (
+          <>
+            {isNumeric ? (
+              <span className="num text-3xl font-semibold">
+                <AnimatedNumber
+                  value={numericValue}
+                  decimals={
+                    typeof value === "number"
+                      ? (value.toString().split(".")[1]?.length ?? 0)
+                      : (value.split(".")[1]?.length ?? 0)
+                  }
+                />
+              </span>
+            ) : (
+              <span className="num text-3xl font-semibold">{value}</span>
+            )}
 
-      {unit ? (
-        <span className="text-sm text-muted-foreground">
-          {unit}
-        </span>
-      ) : null}
-    </>
-  )}
-</div>
+            {unit ? <span className="text-sm text-muted-foreground">{unit}</span> : null}
+          </>
+        )}
+      </div>
 
       <div className="relative mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
         {typeof trend === "number" ? <Trend value={trend} /> : null}

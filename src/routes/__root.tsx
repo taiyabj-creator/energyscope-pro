@@ -1,4 +1,3 @@
-
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -132,7 +131,7 @@ function RootShell({ children }: { children: ReactNode }) {
     </html>
   );
 }
-  function ProtectedApp() {
+function ProtectedApp() {
   const { loggedIn } = useDashboardAuth();
   const location = useLocation();
 
@@ -161,13 +160,12 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  
 
   return (
-   <QueryClientProvider client={queryClient}>
-  <DashboardAuthProvider>
-    <ProtectedApp />
-  </DashboardAuthProvider>
-</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <DashboardAuthProvider>
+        <ProtectedApp />
+      </DashboardAuthProvider>
+    </QueryClientProvider>
   );
 }

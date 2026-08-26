@@ -13,10 +13,7 @@ function generateCsv(data) {
   lines.push(["Time", "Power (W)"]);
 
   for (const row of data.daily.results ?? []) {
-    lines.push([
-      row.timeMinutes,
-      row.PvProduction,
-    ]);
+    lines.push([row.timeMinutes, row.PvProduction]);
   }
 
   lines.push([]);
@@ -24,10 +21,7 @@ function generateCsv(data) {
   lines.push(["Day", "Energy (kWh)"]);
 
   for (const row of data.monthly.results ?? []) {
-    lines.push([
-      row.date,
-      row.PvProduction,
-    ]);
+    lines.push([row.date, row.PvProduction]);
   }
 
   lines.push([]);
@@ -35,10 +29,7 @@ function generateCsv(data) {
   lines.push(["Month", "Energy (MWh)"]);
 
   for (const row of data.yearly.results ?? []) {
-    lines.push([
-      row.month,
-      row.PvProduction,
-    ]);
+    lines.push([row.month, row.PvProduction]);
   }
 
   lines.push([]);
@@ -46,15 +37,10 @@ function generateCsv(data) {
   lines.push(["Year", "Energy (MWh)"]);
 
   for (const row of data.total.results ?? []) {
-    lines.push([
-      row.year,
-      row.PvProduction,
-    ]);
+    lines.push([row.year, row.PvProduction]);
   }
 
-  return lines
-    .map(line => line.map(csvEscape).join(","))
-    .join("\n");
+  return lines.map((line) => line.map(csvEscape).join(",")).join("\n");
 }
 
 async function generateExcel(data) {
@@ -77,26 +63,25 @@ async function generateExcel(data) {
   });
 
   const yearly = workbook.addWorksheet("Yearly");
-    yearly.columns = [
+  yearly.columns = [
     { header: "Month", key: "month", width: 18 },
     { header: "Energy (kWh)", key: "energy", width: 18 },
   ];
 
   (data.yearly.results ?? []).forEach((row) => {
     yearly.addRow({
-      month: new Date(
-        Number(data.yearly.data.date_parameter),
-        row.month - 1,
-        1
-      ).toLocaleString("en-US", {
-        month: "short",
-        year: "numeric",
-      }),
+      month: new Date(Number(data.yearly.data.date_parameter), row.month - 1, 1).toLocaleString(
+        "en-US",
+        {
+          month: "short",
+          year: "numeric",
+        },
+      ),
       energy: (row.PvProduction * 1000).toFixed(2),
     });
   });
   const total = workbook.addWorksheet("Lifetime");
-    total.columns = [
+  total.columns = [
     { header: "Year", key: "year", width: 12 },
     { header: "Energy (kWh)", key: "energy", width: 18 },
   ];

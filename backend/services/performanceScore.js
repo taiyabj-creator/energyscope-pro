@@ -44,7 +44,6 @@ function buildPerformanceScore({
   loggerOnline,
   daysWithoutRain,
 }) {
-
   const generation = scoreGeneration(currentEnergy, expectedToday);
 
   const weather = scoreWeather(weatherFactor);
@@ -58,12 +57,12 @@ function buildPerformanceScore({
   const data = scoreData(loggerOnline);
 
   const total =
-      generation * 0.40 +
-      weather * 0.20 +
-      seasonal * 0.15 +
-      geometry * 0.10 +
-      maintenance * 0.10 +
-      data * 0.05;
+    generation * 0.4 +
+    weather * 0.2 +
+    seasonal * 0.15 +
+    geometry * 0.1 +
+    maintenance * 0.1 +
+    data * 0.05;
 
   let status = "Excellent";
 
@@ -72,20 +71,20 @@ function buildPerformanceScore({
   else if (total < 90) status = "Good";
 
   return {
-      score: Math.round(total),
-      status,
+    score: Math.round(total),
+    status,
 
-      breakdown: {
-          generation,
-          weather,
-          seasonal,
-          geometry,
-          maintenance,
-          data,
-      },
+    breakdown: {
+      generation,
+      weather,
+      seasonal,
+      geometry,
+      maintenance,
+      data,
+    },
   };
 }
 
 module.exports = {
-    buildPerformanceScore,
+  buildPerformanceScore,
 };

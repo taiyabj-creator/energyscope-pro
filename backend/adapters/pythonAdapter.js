@@ -1,15 +1,11 @@
 const { spawn } = require("child_process");
 const path = require("path");
 
-const PYTHON_SCRIPT = path.join(
-  __dirname,
-  "python",
-  "utl_api.py"
-);
+const PYTHON_SCRIPT = path.join(__dirname, "python", "utl_api.py");
 
 async function login(email, password) {
   return new Promise((resolve, reject) => {
-    const py = spawn(process.env.PYTHON_BIN || "python3", [PYTHON_SCRIPT]);
+    const py = spawn(process.env.PYTHON_BIN || "python", [PYTHON_SCRIPT]);
 
     let stdout = "";
     let stderr = "";
@@ -22,33 +18,37 @@ async function login(email, password) {
       stderr += data.toString();
     });
 
-    py.on("error", reject);
+    py.on("error", (err) => {
+      console.error("Python adapter spawn error:", err.message);
+      const e = new Error("AUTH_SERVICE_ERROR");
+      e.code = "AUTH_SERVICE_ERROR";
+      reject(e);
+    });
 
-        py.on("close", (code) => {
+    py.on("close", (code) => {
       if (code !== 0) {
-        return reject(
-          new Error(
-            stderr.trim() || `Python exited with code ${code}`
-          )
-        );
+        console.error("Python adapter exited with code", code, ":", stderr.trim());
+        const e = new Error("AUTH_SERVICE_ERROR");
+        e.code = "AUTH_SERVICE_ERROR";
+        return reject(e);
       }
 
       try {
         const result = JSON.parse(stdout.trim());
 
         if (!result || typeof result !== "object") {
-          throw new Error("Invalid adapter response.");
+          console.error("Python adapter returned non-object response");
+          const e = new Error("AUTH_SERVICE_ERROR");
+          e.code = "AUTH_SERVICE_ERROR";
+          return reject(e);
         }
 
         resolve(result);
       } catch (err) {
-        reject(
-          new Error(
-            `Python adapter returned invalid JSON: ${
-              err.message
-            }`
-          )
-        );
+        console.error("Python adapter JSON parse error:", err.message);
+        const e = new Error("AUTH_SERVICE_ERROR");
+        e.code = "AUTH_SERVICE_ERROR";
+        reject(e);
       }
     });
 
@@ -56,7 +56,7 @@ async function login(email, password) {
       JSON.stringify({
         email,
         password,
-      })
+      }),
     );
 
     py.stdin.end();

@@ -1,10 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const {
-  getMaintenance,
-  updateMaintenance,
-} = require("../services/maintenanceService");
+const { getMaintenance, updateMaintenance } = require("../services/maintenanceService");
 
 router.get("/", async (req, res) => {
   try {

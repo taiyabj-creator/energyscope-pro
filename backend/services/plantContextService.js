@@ -172,6 +172,9 @@ async function buildPlantContext({ token, session }) {
   // --- Today + month (from the same monthly chart /api/prediction reads) ---
   let today = unavailable(reasonOf(exportRes, "generation data"));
   let month = unavailable(reasonOf(exportRes, "generation data"));
+  let monthlyGeneration = [];
+  let currentMonthBestDay = null;
+  let currentMonthWorstDay = null;
   const exportData = value(exportRes);
   if (exportData?.monthly?.results) {
     const rows = Array.isArray(exportData.monthly.results) ? exportData.monthly.results : [];
@@ -198,10 +201,27 @@ async function buildPlantContext({ token, session }) {
       today.currentPowerKw = unavailable(reasonOf(inverterRes, "live power"));
     }
 
+    const monthKey = `${nowIst.slice(0, 4)}-${nowIst.slice(5, 7)}`;
+
+    // Build explicit per-day generation array for the current month.
+    // Only rows actually returned by UTL are included; missing days are
+    // never fabricated or zero-filled.
+    monthlyGeneration = rows.map((r) => ({
+      date: `${monthKey}-${String(r.date).padStart(2, "0")}`,
+      generationKwh: round2(r.PvProduction ?? 0),
+    }));
+
+    if (monthlyGeneration.length > 0) {
+      const best = monthlyGeneration.reduce((a, b) => (b.generationKwh > a.generationKwh ? b : a));
+      const worst = monthlyGeneration.reduce((a, b) => (b.generationKwh < a.generationKwh ? b : a));
+      currentMonthBestDay = { date: best.date, generationKwh: best.generationKwh };
+      currentMonthWorstDay = { date: worst.date, generationKwh: worst.generationKwh };
+    }
+
     if (mtdRows.length > 0) {
       const mtdTotal = mtdRows.reduce((sum, r) => sum + Number(r.PvProduction ?? 0), 0);
       month = {
-        key: `${nowIst.slice(0, 4)}-${nowIst.slice(5, 7)}`,
+        key: monthKey,
         monthToDateKwh: round2(mtdTotal),
         daysRecorded: mtdRows.length,
         dailyAverageKwh: round2(mtdTotal / mtdRows.length),
@@ -311,6 +331,9 @@ async function buildPlantContext({ token, session }) {
     plant,
     today,
     month,
+    monthlyGeneration,
+    currentMonthBestDay,
+    currentMonthWorstDay,
     recentHistory,
     recentDays,
     weather,
@@ -371,18 +394,28 @@ function renderContextAppendix(context) {
     );
     lines.push("");
   }
+  if (Array.isArray(c.monthlyGeneration) && c.monthlyGeneration.length > 0) {
+    const dayLines = c.monthlyGeneration.map((d) => `${d.date}: ${d.generationKwh} kWh`);
+    lines.push(
+      section(
+        "CURRENT MONTH DAILY GENERATION (MEASURED - from UTL monthly chart for this calendar month ONLY - use this for best/worst/trend-of-this-month questions)",
+        dayLines.join("\n"),
+      ),
+    );
+    lines.push("");
+  }
   lines.push(
     section(
-      "THIS MONTH (MEASURED)",
+      "CURRENT MONTH SUMMARY (MEASURED)",
       isAvailable(c.month)
-        ? `month-to-date kWh: ${c.month.monthToDateKwh}\ndays recorded: ${c.month.daysRecorded}\ndaily average kWh: ${c.month.dailyAverageKwh}`
+        ? `month-to-date kWh: ${c.month.monthToDateKwh}\ndays recorded: ${c.month.daysRecorded}\ndaily average kWh: ${c.month.dailyAverageKwh}${c.currentMonthBestDay ? `\nbest day: ${c.currentMonthBestDay.generationKwh} kWh on ${c.currentMonthBestDay.date}` : ""}${c.currentMonthWorstDay ? `\nworst day: ${c.currentMonthWorstDay.generationKwh} kWh on ${c.currentMonthWorstDay.date}` : ""}`
         : fmt(c.month),
     ),
   );
   lines.push("");
   lines.push(
     section(
-      "LAST 30 COMPLETED DAYS (MEASURED)",
+      "LAST 30 COMPLETED DAYS (MEASURED - rolling historical window, may cross month boundaries - use CURRENT MONTH sections above for this-month questions)",
       isAvailable(c.recentHistory)
         ? `window: ${c.recentHistory.windowDays} days ending ${c.recentHistory.yesterdayDate}\nyesterday kWh: ${c.recentHistory.yesterdayKwh}\nperiod total kWh: ${c.recentHistory.totalKwh}\nperiod average kWh/day: ${c.recentHistory.averageKwh}\nlast-7-days average kWh/day: ${c.recentHistory.last7DaysAverageKwh}\nbest day: ${c.recentHistory.bestDay.kwh} kWh on ${c.recentHistory.bestDay.date}\nworst day: ${c.recentHistory.worstDay.kwh} kWh on ${c.recentHistory.worstDay.date}`
         : fmt(c.recentHistory),
