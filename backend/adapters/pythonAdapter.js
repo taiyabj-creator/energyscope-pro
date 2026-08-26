@@ -5,7 +5,7 @@ const PYTHON_SCRIPT = path.join(__dirname, "python", "utl_api.py");
 
 async function login(email, password) {
   return new Promise((resolve, reject) => {
-    const py = spawn(process.env.PYTHON_BIN || "python", [PYTHON_SCRIPT]);
+    const py = spawn(process.env.PYTHON_BIN || "python3", [PYTHON_SCRIPT]);
 
     let stdout = "";
     let stderr = "";
