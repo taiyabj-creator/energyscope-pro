@@ -14,6 +14,8 @@ The goal of the project is to build a faster, cleaner, and more feature-rich alt
 - Live generation charts (daily / monthly / yearly / total)
 - Historical production data with automatic daily archival
 - Weather dashboard
+- Smart daily energy prediction (weather-based base, corrected by historical
+  similarity/recency-weighted residuals) with per-day observed weather history
 - Production analytics and performance insights
 - Maintenance history module
 - Data export (PDF / Excel)
@@ -46,7 +48,8 @@ The goal of the project is to build a faster, cleaner, and more feature-rich alt
 External services:
 
 - UTL Solar RMS API — accessed exclusively through the backend
-- Open-Meteo — weather forecasts
+- Open-Meteo — weather forecasts (forecast API) and historical weather
+  (archive API, used server-side for the daily prediction correction)
 
 ---
 
@@ -245,6 +248,21 @@ Read these before contributing:
 - [PROJECT_ROADMAP.md](PROJECT_ROADMAP.md) — development roadmap
 - [CONTRIBUTING.md](CONTRIBUTING.md) — coding standards and workflow
 - [AGENTS.md](AGENTS.md) — guidelines for AI coding assistants
+
+---
+
+# AI / Memory (opencode-mem)
+
+The project is edited with opencode and uses the **opencode-mem** memory plugin
+to persist project knowledge (architecture decisions, the smart-prediction
+algorithm, plant context) between sessions. It is configured **globally** in
+`~/.config/opencode/opencode-mem.jsonc` (not stored in this repo):
+
+- Vector store: `~/.opencode-mem/data`, with local embedding (Nomic Embed v1).
+- Integrated with opencode's own provider (`opencodeProvider: "opencode"`,
+  `opencodeModel: "big-pickle"`); auto-capture is enabled and scoped
+  **per project** (`memory.defaultScope: "project"`).
+- Optional management web UI at `http://localhost:4747`.
 
 ---
 

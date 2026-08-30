@@ -62,12 +62,15 @@ export function resolvePushUiState(input: PushUiInput): PushUiState {
 
   if (input.permission === "granted") {
     if (input.hasLocalSubscription) {
-      const devices = input.serverCount === null ? "…" : String(input.serverCount);
+      // Enabled = THIS browser already holds a push subscription. Enable and
+      // Disable are mutually exclusive and driven solely by the local
+      // subscription, never by the account-wide server count (which counts
+      // every device signed in under the same email and is not this browser).
       return {
         statusKey: "enabled",
-        title: `Enabled · ${devices} device(s) registered`,
+        title: "Enabled",
         hint: "Inverter online/offline alerts and the daily production summary are delivered even when the app is closed.",
-        showEnable: (input.serverCount ?? 1) === 0,
+        showEnable: false,
         showDisable: true,
       };
     }

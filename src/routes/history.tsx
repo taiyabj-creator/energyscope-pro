@@ -229,11 +229,17 @@ function HistoryPage() {
                 <AreaChart data={rows}>
                   <CartesianGrid stroke="#444" strokeDasharray="3 3" />
 
-                  <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="period" tick={{ fill: "#00D9FF", fontSize: 11 }} />
 
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#00D9FF", fontSize: 11 }} />
 
                   <Tooltip
+                    contentStyle={{
+                      background: "#111827",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                      fontSize: 12,
+                    }}
                     formatter={(value: number) => [`${Number(value).toFixed(2)} kWh`, "Generation"]}
                   />
 
@@ -244,17 +250,30 @@ function HistoryPage() {
                     fill="var(--solar)"
                     fillOpacity={0.25}
                     strokeWidth={2}
+                    dot={{ r: 3, fill: "#F5F7FA", stroke: "#F5B83D", strokeWidth: 2 }}
+                    activeDot={{
+                      r: 5,
+                      fill: "#F5F7FA",
+                      stroke: "#F5B83D",
+                      strokeWidth: 2,
+                    }}
                   />
                 </AreaChart>
               ) : (
                 <BarChart data={rows} barCategoryGap="25%">
                   <CartesianGrid stroke="#444" strokeDasharray="3 3" />
 
-                  <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="period" tick={{ fill: "#00D9FF", fontSize: 11 }} />
 
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#00D9FF", fontSize: 11 }} />
 
                   <Tooltip
+                    contentStyle={{
+                      background: "#111827",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                      fontSize: 12,
+                    }}
                     formatter={(value: number) => [`${Number(value).toFixed(2)} kWh`, "Generation"]}
                   />
 

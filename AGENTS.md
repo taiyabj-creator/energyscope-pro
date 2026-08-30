@@ -2,6 +2,65 @@
 
 Guidance for AI coding assistants working in this repository.
 
+## Smart Prediction & Weather History
+
+Prediction is deterministic (no statistical/ML model): a weather-based base is
+corrected by a similarity-weighted historical residual.
+
+- `backend/services/predictionService.js`:
+  - `predictDailyEnergy(...)` — base prediction. Base = `B * WF`, where `B` is a
+    weather-normalized historical baseline (kWh) and `WF` is the current/forecast
+    weather factor (clear/dry = 1, cloudy/rain buckets reduce it).
+  - `predictForDate({ targetDate, currentEnergy, monthAverage, weather... })` —
+    entry point for both the dashboard (`routes/prediction.js`) and the AI/Groq
+    context (`plantContextService.js`). Calls `archiveService.getCorrectionFactor`
+    first and uses its `baseline` (B) as the base, so base and residual share the
+    same baseline.
+  - `applyCorrection(base, corrections)` — clamps correction to ±30% and applies
+    it only when there is enough weighted historical evidence (effectiveSample ≥
+    1.5 and sampleSize ≥ 5).
+- `backend/services/archiveService.js`:
+  - `getCorrectionFactor(...)` — weather-normalized **multiplicative residual**
+    `residual_r = gen_r / (B * WF_r) - 1`, averaged over completed history
+    **strictly before `targetDate`** (`snapshot_date < targetDate` leaks nothing)
+    weighted by weather similarity and recency. Baseline `B = mean(gen_r / WF_r)`,
+    self-excluding per row. Returns `{ correctionFactor, sampleSize,
+    effectiveSample, confidence, bucket, baseline }`.
+  - `canonicalGeneration(row)` — authoritative daily generation, precedence
+    `check_monthly_value → raw_generation_value → generation_kwh` (guards legacy
+    Aug 21/22 integrated rows).
+- `backend/adapters/archiveCollector.js` + `backend/services/archiveService.js`
+  collect a `daily_weather_snapshot` per day via Open-Meteo's **archive API using
+  observed** values (cloud cover averaged over daylight hours, **observed
+  precipitation mm**, not forecast probability). Stale/legacy snapshots
+  (missing observed mm) are repaired; valid snapshots and today's live snapshot
+  are never rewritten.
+- **Today's partial generation is excluded from the base**: `routes/prediction.js`
+  and `plantContextService.js` both filter month-to-date rows with
+  `Number(r.date) < today` (completed days only). `currentEnergy` (today's
+  partial) is display/input only and never part of the learned baseline or
+  correction.
+
+Invariants to preserve: dashboard and Groq context must compute the **identical**
+prediction (both call `predictForDate` with matching inputs); correction is based
+only on dates before the prediction target; config-driven plant lat/lon
+(`backend/config/plant.json`) is used for weather, never hardcoded.
+
+## opencode-mem integration
+
+The repo uses the **opencode-mem** memory plugin, configured globally at
+`~/.config/opencode/opencode-mem.jsonc` (not stored in the repo):
+
+- Vector storage: `~/.opencode-mem/data`; local embedding (Nomic Embed v1).
+- Integration with opencode's own provider: `opencodeProvider: "opencode"` /
+  `opencodeModel: "big-pickle"`; auto-capture enabled and scoped **per project**
+  (`memory.defaultScope: "project"`).
+- Web UI (optional management) at `http://localhost:4747`.
+
+Use the memory tools to store/retrieve project knowledge (architecture decisions,
+the smart-prediction algorithm, plant context). Memory is project-scoped by
+default.
+
 ## Project Context
 
 EnergyScope Pro is a solar monitoring dashboard/PWA for UTL Solar inverter

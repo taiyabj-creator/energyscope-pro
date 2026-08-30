@@ -6,12 +6,14 @@
  *   pm2 save
  *
  * The collector runs once and exits (autorestart: false). cron_restart wakes
- * it THREE TIMES EVERY DAY at 06:00, 13:00 and 20:00 SYSTEM time (TZ below is
- * Asia/Kolkata):
+ * it SIX TIMES EVERY DAY at 00:00, 04:00, 08:00, 12:00, 16:00 and 20:00 SYSTEM
+ * time (TZ below is Asia/Kolkata):
  *
- *   - 06:00 IST  — after sunrise; safety net for any missed overnight run,
- *                  archives the full previous solar day.
- *   - 13:00 IST  — midday checkpoint of today's partial production.
+ *   - 00:00 IST  — overnight backup / safety net.
+ *   - 04:00 IST  — pre-dawn safety net for any missed overnight run.
+ *   - 08:00 IST  — post-sunrise; captures early-day production.
+ *   - 12:00 IST  — midday checkpoint of today's partial production.
+ *   - 16:00 IST  — afternoon checkpoint; declining production phase.
  *   - 20:00 IST  — after sunset; final capture of the completed solar day.
  *
  * Every run performs the same gap-aware scan: it backfills any missing days
@@ -31,10 +33,10 @@ module.exports = {
       exec_mode: "fork",
       instances: 1,
 
-      // Run once per invocation; PM2 cron restarts it at 06:00, 13:00 and
-      // 20:00 IST each day (three gap-aware/idempotent scans per day).
+      // Run once per invocation; PM2 cron restarts it at 00:00, 04:00, 08:00,
+      // 12:00, 16:00 and 20:00 IST each day (six gap-aware/idempotent scans per day).
       autorestart: false,
-      cron_restart: "0 6,13,20 * * *",
+      cron_restart: "0 0,4,8,12,16,20 * * *",
 
       max_memory_restart: "300M",
 

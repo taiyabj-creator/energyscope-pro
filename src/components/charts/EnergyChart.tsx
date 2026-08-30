@@ -24,7 +24,10 @@ const RANGES: { key: EnergyRange; label: string }[] = [
   { key: "total", label: "Total" },
 ];
 
-const AXIS = { stroke: "var(--muted-foreground)", fontSize: 11 };
+const AXIS = {
+  stroke: "var(--muted-foreground)",
+  tick: { fill: "#00D9FF", fontSize: 11 },
+};
 
 interface ChartTooltipPayload {
   color: string;
@@ -45,13 +48,46 @@ function ChartTooltip({
   unit: string;
 }) {
   if (!active || !payload?.length) return null;
+  const color = "#111827";
+  const textColor = "#F5F7FA";
+  const dateColor = "#00D9FF";
+  const valueColor = "#F5B83D";
+  const dotColor = "#F5B83D";
   return (
-    <div className="panel-solid px-3 py-2 text-xs">
-      <p className="mb-1 font-semibold">{label}</p>
+    <div
+      style={{
+        background: color,
+        padding: "12px 16px",
+        borderRadius: 12,
+        color: textColor,
+      }}
+    >
+      <p className="mb-1 font-semibold" style={{ color: dateColor }}>
+        {label}
+      </p>
       {payload.map((p) => (
-        <p key={p.dataKey} className="flex items-center gap-2 text-muted-foreground">
-          <span className="size-2 rounded-full" style={{ background: p.color }} />
-          {p.name}: <span className="num font-semibold text-foreground">{p.value}</span> {unit}
+        <p
+          key={p.dataKey}
+          style={{
+            margin: "4px 0",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            color: textColor,
+          }}
+        >
+          <span
+            style={{
+              width: "8px",
+              height: "8px",
+              background: dotColor,
+              borderRadius: "50%",
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ color: valueColor }} className="num font-semibold">
+            {p.name}: {p.value} {unit}
+          </span>
         </p>
       ))}
     </div>
@@ -234,8 +270,8 @@ export function EnergyChart() {
                   stroke="var(--solar)"
                   strokeWidth={2}
                   fill="url(#fillSolar)"
-                  dot={false}
-                  animationDuration={900}
+                  dot={{ r: 3, fill: "#F5F7FA", stroke: "#F5B83D", strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: "#F5F7FA", stroke: "#F5B83D", strokeWidth: 2 }}
                 />
               </AreaChart>
             )}

@@ -2,52 +2,72 @@ const express = require("express");
 const router = express.Router();
 
 const { getExportData, getLast30DaysGeneration } = require("../services/exportService");
-const { predictDailyEnergy } = require("../services/predictionService");
+const { predictForDate } = require("../services/predictionService");
 const { getWeather } = require("../services/weatherService");
 const { buildPerformanceScore } = require("../services/performanceScore");
+const archiveService = require("../services/archiveService");
+const plantConfig = require("../config/plant.json");
 
 router.get("/today", async (req, res) => {
   try {
     const now = new Date();
 
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    // Use IST calendar date for "today" and the month, matching the AI
+    // context builder (plantContextService) so the dashboard and assistant
+    // compute the identical base prediction and today's row.
+    const nowIst = archiveService.istDateString(now);
+    const nowIstDate = Number(nowIst.slice(8, 10));
 
-    const year = String(now.getFullYear());
+    const month = nowIst.slice(0, 7);
+
+    const year = nowIst.slice(0, 4);
 
     const data = await getExportData(req.token, req.session, month, year);
     console.log("Monthly response:", JSON.stringify(data.monthly, null, 2));
 
+    // Round today's generation to 2 decimals, matching plantContextService so
+    // the dashboard and AI feed predictDailyEnergy the identical currentEnergy.
     const currentEnergy =
-      data.monthly.results.find((r) => r.date === now.getDate())?.PvProduction ?? 0;
+      Math.round(
+        (Number(
+          data.monthly.results.find((r) => Number(r.date) === nowIstDate)?.PvProduction ?? 0,
+        ) +
+          Number.EPSILON) *
+          100,
+      ) / 100;
 
     const monthly = data.monthly.results ?? [];
 
+    // Month-to-date average over COMPLETED days only (date < today), matching
+    // plantContextService (AI context) so the dashboard and AI always compute
+    // the identical base prediction. Today's partial generation is excluded
+    // from the baseline: it must not drag today's forecast toward itself.
+    const mtdRows = monthly.filter((r) => Number(r.date) < nowIstDate);
     const monthAverage =
-      monthly.length > 0 ? monthly.reduce((sum, r) => sum + r.PvProduction, 0) / monthly.length : 0;
+      mtdRows.length > 0 ? mtdRows.reduce((sum, r) => sum + r.PvProduction, 0) / mtdRows.length : 0;
 
-    const weather = await getWeather(22.5736, 88.3639);
+    const weather = await getWeather(plantConfig.latitude, plantConfig.longitude);
 
-    const sunrise = new Date(weather.sunrise);
-    const sunset = new Date(weather.sunset);
-
-    const sunriseHour = sunrise.getHours() + sunrise.getMinutes() / 60;
-
-    const sunsetHour = sunset.getHours() + sunset.getMinutes() / 60;
-
-    const prediction = predictDailyEnergy({
+    // Full smart prediction for today (IST). predictForDate computes the
+    // current-weather base prediction and then applies the historical residual
+    // correction using ONLY completed history strictly before today, so today's
+    // partial generation / live weather snapshot can never leak into its own
+    // forecast.
+    const corrected = predictForDate({
+      targetDate: nowIst,
       currentEnergy,
       monthAverage,
-
       cloudCover: weather.cloudCover,
       rainProbability: weather.rainProbability,
       weatherCode: weather.weatherCode,
       uvIndex: weather.uvIndex,
     });
+
     const performance = buildPerformanceScore({
       currentEnergy,
-      expectedToday: prediction.expectedToday,
+      expectedToday: corrected.expectedToday,
       monthAverage,
-      weatherFactor: prediction.weatherFactor,
+      weatherFactor: corrected.weatherFactor,
       loggerOnline: true,
       daysWithoutRain: weather.rainProbability > 70 ? 0 : 5,
     });
@@ -71,7 +91,7 @@ router.get("/today", async (req, res) => {
 
     res.json({
       success: true,
-      ...prediction,
+      ...corrected,
       performance,
       rank,
     });

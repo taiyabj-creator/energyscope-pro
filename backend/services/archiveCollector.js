@@ -64,6 +64,8 @@ const archiveService = require("./archiveService");
 const COLLECTOR_SESSION_KEY = "__collector__";
 const UTL_BASE = "https://utlsolarrms.com/api";
 
+const plantConfig = require("../config/plant.json");
+
 // A collector session must survive cleanupExpiredSessions() forever.
 const SESSION_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
@@ -189,6 +191,179 @@ async function verifyPlantId(session, plantId, deps = {}) {
     }
   } catch (err) {
     log(`WARN PlantStatus verification skipped: ${err.message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Weather snapshot collection (for prediction correction model)
+// ---------------------------------------------------------------------------
+
+const fetch = global.fetch;
+
+/**
+ * Fetches historical weather from Open-Meteo's archive API for a single date.
+ * Returns { cloudCover, rainProbability, weatherCode, uvIndex } or null on failure.
+ * For today's date, falls back to the live weatherService.
+ */
+async function fetchHistoricalWeather(dateStr, deps = {}) {
+  const lat = plantConfig.latitude;
+  const lon = plantConfig.longitude;
+  if (!lat || !lon) return null;
+
+  const todayIst = archiveService.istDateString(new Date());
+  if (dateStr >= todayIst) {
+    // Today or future: use the live weather service
+    const ws = deps.weatherService || require("./weatherService");
+    try {
+      const w = await ws.getWeather(lat, lon);
+      return {
+        cloudCover: w.cloudCover,
+        rainProbability: w.rainProbability,
+        weatherCode: w.weatherCode,
+        uvIndex: w.uvIndex,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Historical date: use the Open-Meteo archive API. The archive returns
+  // observed weather only; precipitation_probability is a forecast-only field
+  // and is null for historical dates, so we use actual precipitation instead.
+  try {
+    const params = new URLSearchParams({
+      latitude: String(lat),
+      longitude: String(lon),
+      start_date: dateStr,
+      end_date: dateStr,
+      daily: "weather_code,uv_index_max,precipitation_sum,rain_sum,precipitation_hours",
+      hourly: "cloud_cover,precipitation",
+      timezone: "Asia/Kolkata",
+    });
+    const response = await fetch(`https://archive-api.open-meteo.com/v1/archive?${params}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+
+    const dailyCode = data.daily?.weather_code?.[0] ?? null;
+    const uvMax = data.daily?.uv_index_max?.[0] ?? null;
+
+    // Observed total precipitation for the day (mm). rain_sum is the liquid
+    // portion; precipitation_sum is the total (includes melted snow). We store
+    // precipitation_sum as the authoritative observed amount.
+    const precipitationSumMm =
+      Number.isFinite(Number(data.daily?.precipitation_sum?.[0])) &&
+      Number(data.daily?.precipitation_sum?.[0]) >= 0
+        ? Number(data.daily?.precipitation_sum?.[0])
+        : null;
+
+    const hourlyCloud = data.hourly?.cloud_cover ?? [];
+
+    // Average cloud cover over daylight hours (6 AM – 6 PM IST = indices 6..17)
+    const daylightCloud = hourlyCloud.slice(6, 18);
+    const cloudCover =
+      daylightCloud.length > 0
+        ? daylightCloud.reduce((s, v) => s + (v ?? 0), 0) / daylightCloud.length
+        : null;
+
+    // Deterministic 0-100 rain intensity derived from OBSERVED mm, so the
+    // existing bucket/base-factor logic reflects actual (not probable) rain.
+    let rainProbability = 0;
+    if (precipitationSumMm !== null) {
+      if (precipitationSumMm <= 0) rainProbability = 0;
+      else if (precipitationSumMm < 1) rainProbability = 30;
+      else if (precipitationSumMm < 5) rainProbability = 50;
+      else if (precipitationSumMm < 10) rainProbability = 70;
+      else rainProbability = 90;
+    }
+
+    return {
+      cloudCover: cloudCover !== null ? Math.round(cloudCover * 10) / 10 : null,
+      rainProbability,
+      weatherCode: dailyCode,
+      uvIndex: uvMax,
+      precipitationSumMm,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * True when an existing HISTORICAL weather snapshot is stale/incomplete and
+ * should be refreshed from the archive API.
+ *
+ * Historical snapshots written before observed-precipitation support (or by the
+ * old forecast-based bug) carry `precipitation_sum_mm = NULL` and
+ * `rain_probability = 0` for every day. A genuinely dry historical day instead
+ * stores observed `mm = 0`, so a NULL mm unambiguously marks a stale/legacy row.
+ *
+ * Returns false for null rows and for any valid historical snapshot that already
+ * carries observed precipitation — such rows are never rewritten on routine runs.
+ */
+function isStaleHistoricalSnapshot(snapshot) {
+  if (!snapshot) return false;
+  const mm = snapshot.precipitation_sum_mm;
+  const mmMissing = mm === null || mm === undefined;
+  const rain = Number(snapshot.rain_probability);
+  // Explicit legacy signature: forecast-derived zero rain with no recorded mm.
+  if (mmMissing && rain === 0) return true;
+  // Any historical row missing observed precipitation is incomplete.
+  if (mmMissing) return true;
+  return false;
+}
+
+/**
+ * Stores a weather snapshot for the given date. Non-fatal: logs a warning
+ * on failure but does not throw.
+ *
+ * Returns one of: 'inserted' | 'repaired' | 'skipped' | 'unavailable' | 'failed'.
+ *   - New dates (no snapshot) -> fetched and stored ('inserted').
+ *   - Today/future -> never rewritten; a live snapshot is a point-in-time capture
+ *     ('skipped', or 'inserted' when it did not exist yet).
+ *   - Historical valid snapshot -> kept as-is ('skipped').
+ *   - Historical stale/incomplete snapshot -> refreshed from observed archive
+ *     precipitation ('repaired').
+ */
+async function collectWeatherSnapshot(dateStr, plantId, deps = {}) {
+  const service = deps.archiveService || archiveService;
+  const existing = service.getWeatherSnapshot(plantId, dateStr);
+
+  const todayIst = archiveService.istDateString(new Date());
+  const isTodayOrFuture = dateStr >= todayIst;
+
+  if (existing) {
+    // Live weather (today/future) is never regenerated on subsequent runs.
+    if (isTodayOrFuture) return "skipped";
+    // Historical: keep valid snapshots; refresh only stale/incomplete ones.
+    if (!isStaleHistoricalSnapshot(existing)) return "skipped";
+  }
+
+  try {
+    const weather = await fetchHistoricalWeather(dateStr, deps);
+    if (!weather) {
+      log(`WARN Weather snapshot unavailable for ${dateStr}`);
+      return "unavailable";
+    }
+    service.upsertWeatherSnapshot({
+      plantId,
+      snapshotDate: dateStr,
+      cloudCover: weather.cloudCover,
+      rainProbability: weather.rainProbability,
+      weatherCode: weather.weatherCode,
+      uvIndex: weather.uvIndex,
+      precipitationSumMm: weather.precipitationSumMm,
+    });
+    log(
+      existing
+        ? `Weather snapshot repaired for ${dateStr}`
+        : `Weather snapshot stored for ${dateStr}`,
+    );
+    return existing ? "repaired" : "inserted";
+  } catch (err) {
+    log(`WARN Weather snapshot failed for ${dateStr}: ${err.message}`);
+    return "failed";
   }
 }
 
@@ -630,7 +805,21 @@ async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {
 
   const collection = await runCollection([...missing, ...stale], triggerType, deps, {
     requestedCount: dates.length,
+    // The scheduled path performs its own full historical-range weather pass
+    // below, so stale/incomplete historical weather snapshots are repaired even
+    // when no generation dates are missing or inconsistent.
+    skipWeather: true,
   });
+
+  // Best-effort weather/repair pass over the ENTIRE historical range, run only
+  // after all generation records for the run have been stored. It stores
+  // missing snapshots, repairs stale/legacy ones, and leaves valid snapshots
+  // untouched. Never throws into the scheduled run.
+  try {
+    await collectWeatherForDates(dates, deps);
+  } catch (_) {
+    // Weather is enhancement-only; never let it affect the scheduled run.
+  }
 
   // Ground-truth recount straight from the database: anything without a valid
   // row now is still missing, whatever happened above.
@@ -664,6 +853,60 @@ async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {
   };
 }
 
+/**
+ * Best-effort weather snapshot collection, run as a separate pass AFTER all
+ * generation records for the run have been stored. STRICTLY enhancement-only:
+ * it never throws, never delays or alters generation collection/reconciliation,
+ * and imposes no new required dependency on the injected services (so existing
+ * partial mocks / callers are unaffected). Any unmet dependency, missing
+ * service method, or network failure is swallowed and logged as a warning.
+ * Inserts a small delay between network calls to avoid hammering Open-Meteo.
+ */
+async function collectWeatherForDates(dates, deps = {}) {
+  try {
+    const service = deps.archiveService || archiveService;
+    // No required dependency: fall back gracefully if a mock lacks these.
+    let plantId;
+    try {
+      plantId = typeof service.PLANT_ID === "function" ? service.PLANT_ID() : null;
+    } catch (_) {
+      plantId = null;
+    }
+    if (plantId === null || plantId === undefined) {
+      log("WARN weather pass skipped (no plant id available)");
+      return;
+    }
+    if (
+      typeof service.getWeatherSnapshot !== "function" ||
+      typeof service.upsertWeatherSnapshot !== "function"
+    ) {
+      log("WARN weather pass skipped (snapshot service unavailable)");
+      return;
+    }
+
+    let stored = 0;
+    for (const dateStr of dates) {
+      try {
+        // collectWeatherSnapshot decides whether to store, keep, or repair.
+        // It never rewrites valid historical rows and never touches live rows.
+        const result = await collectWeatherSnapshot(dateStr, plantId, deps);
+        if (result === "inserted" || result === "repaired") stored++;
+      } catch (err) {
+        // Weather is enhancement-only; a failure here is non-fatal.
+        log(`WARN weather snapshot failed for ${dateStr}: ${err.message}`);
+      }
+      // Rate limit: ~1 request per second to the weather provider.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (stored > 0) {
+      log(`Weather pass: snapshots collected=${stored}`);
+    }
+  } catch (err) {
+    // The weather pass must never abort or alter generation collection.
+    log(`WARN weather pass skipped: ${err.message}`);
+  }
+}
+
 async function runCollection(dates, triggerType, deps = {}, opts = {}) {
   const service = deps.archiveService || archiveService;
   const runId = service.startRun(triggerType);
@@ -687,6 +930,20 @@ async function runCollection(dates, triggerType, deps = {}, opts = {}) {
       failures.push({ date: dateStr, error: err.message });
       log(`ERROR ${dateStr}: ${err.message}`);
       log(`Leaving ${dateStr} unarchived; it will be retried on the next run.`);
+    }
+  }
+
+  // Weather snapshots are enhancement-only and must never delay or block
+  // generation archiving. Collect them in a separate, best-effort pass that
+  // runs only after all generation records have been stored.
+  // The scheduled (gap-aware) path passes skipWeather and performs its own, full
+  // historical-range weather pass so stale snapshots get repaired even when no
+  // generation dates are missing.
+  if (!opts.skipWeather) {
+    try {
+      await collectWeatherForDates(dates, deps);
+    } catch (_) {
+      // Never let weather collection affect generation results.
     }
   }
 
@@ -723,5 +980,9 @@ module.exports = {
   previousCompletedIstDay,
   reconcileCanonicalValues,
   fetchMonthlyScalars,
+  fetchHistoricalWeather,
+  isStaleHistoricalSnapshot,
+  collectWeatherSnapshot,
+  collectWeatherForDates,
   COLLECTOR_SESSION_KEY,
 };

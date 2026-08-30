@@ -69,6 +69,18 @@ function SettingsPage() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      // Re-sync the React snapshot with the LIVE browser permission so the
+      // card can never drift from Notification.permission (e.g. granting in
+      // another tab while this one is open).
+      if (typeof Notification !== "undefined") {
+        setNotificationPermission(
+          Notification.permission === "default"
+            ? "default"
+            : Notification.permission === "granted"
+              ? "granted"
+              : "denied",
+        );
+      }
       const local = await getExistingSubscription();
       let server: number | null = null;
       try {
@@ -84,6 +96,15 @@ function SettingsPage() {
   }, []);
 
   async function refreshPushState() {
+    if (typeof Notification !== "undefined") {
+      setNotificationPermission(
+        Notification.permission === "default"
+          ? "default"
+          : Notification.permission === "granted"
+            ? "granted"
+            : "denied",
+      );
+    }
     const local = await getExistingSubscription();
     let server: number | null = null;
     try {
@@ -101,8 +122,18 @@ function SettingsPage() {
     try {
       // Ask ONCE, directly inside this tap handler (Android Chrome requires
       // the prompt to be a consequence of the user gesture). Never re-prompt
-      // when Chrome already reports "denied".
-      if (notificationPermission !== "granted") {
+      // when Chrome already reports "denied". Check the LIVE browser
+      // permission so a stale React snapshot can't trigger a redundant or
+      // incorrect prompt.
+      const livePermission =
+        typeof Notification !== "undefined"
+          ? Notification.permission === "default"
+            ? "default"
+            : Notification.permission === "granted"
+              ? "granted"
+              : "denied"
+          : "default";
+      if (livePermission !== "granted") {
         const permission = await requestPushPermission();
         setNotificationPermission(
           permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default",

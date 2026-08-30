@@ -79,17 +79,17 @@ function AnalyticsPage() {
                   tickLine={false}
                   axisLine={false}
                   stroke="var(--muted-foreground)"
-                  fontSize={11}
+                  tick={{ fill: "#00D9FF", fontSize: 11 }}
                 />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
                   stroke="var(--muted-foreground)"
-                  fontSize={11}
+                  tick={{ fill: "#00D9FF", fontSize: 11 }}
                 />
                 <Tooltip
                   contentStyle={{
-                    background: "var(--popover)",
+                    background: "#111827",
                     border: "1px solid var(--border)",
                     borderRadius: 12,
                     fontSize: 12,
@@ -102,7 +102,7 @@ function AnalyticsPage() {
                   name="Production"
                   stroke="var(--solar)"
                   strokeWidth={2.4}
-                  dot={{ r: 3 }}
+                  dot={{ r: 3, fill: "#F5F7FA", stroke: "#F5B83D", strokeWidth: 2 }}
                   animationDuration={900}
                 />
               </LineChart>

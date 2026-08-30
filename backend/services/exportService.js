@@ -66,8 +66,8 @@ async function getExportData(jwtToken, session, month, year) {
 async function getLast30DaysGeneration(jwtToken, session, referenceDate = new Date()) {
   const monthsNeeded = new Set();
 
-  // Look back 30 completed days (exclude today)
-  for (let i = 1; i <= 30; i++) {
+  // Look back 29 completed days (exclude today)
+  for (let i = 1; i <= 29; i++) {
     const d = new Date(referenceDate);
     d.setDate(d.getDate() - i);
     monthsNeeded.add(monthKey(d));
@@ -86,7 +86,7 @@ async function getLast30DaysGeneration(jwtToken, session, referenceDate = new Da
 
   const history = [];
 
-  for (let i = 1; i <= 30; i++) {
+  for (let i = 1; i <= 29; i++) {
     const d = new Date(referenceDate);
     d.setDate(d.getDate() - i);
 

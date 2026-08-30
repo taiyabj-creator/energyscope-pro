@@ -90,7 +90,34 @@ function initSchema(db) {
       dates_stored   INTEGER NOT NULL DEFAULT 0,
       error_text     TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS daily_weather_snapshot (
+      plant_id            TEXT NOT NULL,
+      snapshot_date       TEXT NOT NULL,
+      cloud_cover         REAL,
+      rain_probability    REAL,
+      weather_code        INTEGER,
+      uv_index            REAL,
+      precipitation_sum_mm REAL,
+      collected_at        INTEGER NOT NULL,
+      UNIQUE (plant_id, snapshot_date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dws_plant_date
+      ON daily_weather_snapshot(plant_id, snapshot_date);
   `);
+
+  // Migration: precipitation_sum_mm (observed mm) added after initial rollout,
+  // so historical weather can store actual precipitation rather than the archive
+  // API's null forecast probability. Guarded so existing databases upgrade in
+  // place without touching any other column.
+  try {
+    db.exec(`ALTER TABLE daily_weather_snapshot ADD COLUMN precipitation_sum_mm REAL`);
+  } catch (err) {
+    if (!String(err?.message || "").includes("duplicate column name")) {
+      throw err;
+    }
+  }
 }
 
 module.exports = { getArchiveDb };

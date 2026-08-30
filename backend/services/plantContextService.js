@@ -24,8 +24,9 @@ const path = require("path");
 const utlApi = require("./utlApi");
 const exportService = require("./exportService");
 const weatherService = require("./weatherService");
-const { predictDailyEnergy } = require("./predictionService");
+const { predictForDate } = require("./predictionService");
 const { buildPerformanceScore } = require("./performanceScore");
+const archiveService = require("./archiveService");
 const plantConfig = require("../config/plant.json");
 
 const CONTEXT_TTL_MS = 60_000;
@@ -179,7 +180,11 @@ async function buildPlantContext({ token, session }) {
   if (exportData?.monthly?.results) {
     const rows = Array.isArray(exportData.monthly.results) ? exportData.monthly.results : [];
     const todayRow = rows.find((r) => Number(r.date) === Number(nowIst.slice(8, 10)));
-    const mtdRows = rows.filter((r) => Number(r.date) <= Number(nowIst.slice(8, 10)));
+    // Completed days only (date < today) for the month-to-date average, matching
+    // routes/prediction.js so dashboard and AI feed predictDailyEnergy/forecast
+    // the IDENTICAL baseline. Today's partial generation is excluded so it
+    // cannot pull today's forecast toward its own partial value.
+    const mtdRows = rows.filter((r) => Number(r.date) < Number(nowIst.slice(8, 10)));
 
     today = {
       generationKwh: todayRow ? round2(todayRow.PvProduction ?? 0) : null,
@@ -224,7 +229,7 @@ async function buildPlantContext({ token, session }) {
         key: monthKey,
         monthToDateKwh: round2(mtdTotal),
         daysRecorded: mtdRows.length,
-        dailyAverageKwh: round2(mtdTotal / mtdRows.length),
+        dailyAverageKwh: mtdTotal / mtdRows.length,
       };
     } else {
       month = unavailable("monthly chart has no rows for this month yet");
@@ -285,7 +290,7 @@ async function buildPlantContext({ token, session }) {
       }
     : unavailable(reasonOf(weatherRes, "weather"));
 
-  // --- Forecast (predictionService output, verbatim - never recalculated) ----
+  // --- Forecast (predictionService output, enhanced with historical correction) -
   let forecast = unavailable("requires today's generation and weather");
   const monthAverage = isAvailable(month) ? month.dailyAverageKwh : null;
   const currentEnergy =
@@ -296,8 +301,13 @@ async function buildPlantContext({ token, session }) {
     isAvailable(weather) &&
     typeof weather.cloudCoverPercent === "number"
   ) {
+    // predictForDate(targetDate=nowIst) enforces that the historical correction
+    // uses only completed data strictly BEFORE today, so today's partial
+    // generation / live snapshot cannot leak into today's own forecast. The
+    // current weather still drives the base prediction.
     forecast = {
-      ...predictDailyEnergy({
+      ...predictForDate({
+        targetDate: nowIst,
         currentEnergy,
         monthAverage,
         cloudCover: weather.cloudCoverPercent,
@@ -435,7 +445,7 @@ function renderContextAppendix(context) {
     section(
       "ENERGYSCOPE FORECAST (CALCULATED by predictionService - authoritative, explain but NEVER recalculate)",
       isAvailable(c.forecast)
-        ? `expectedToday kWh: ${c.forecast.expectedToday}\ndifference vs actual kWh: ${c.forecast.difference} (${c.forecast.differenceLabel})\nforecast percent achieved: ${c.forecast.forecastPercent}%\nmonth average baseline kWh: ${c.forecast.monthAverage}\nweather factor applied: ${c.forecast.weatherFactor}\nconfidence: ${c.forecast.confidence}`
+        ? `expectedToday kWh: ${c.forecast.expectedToday}\ndifference vs actual kWh: ${c.forecast.difference} (${c.forecast.differenceLabel})\nforecast percent achieved: ${c.forecast.forecastPercent}%\nmonth average baseline kWh: ${c.forecast.monthAverage}\nweather factor applied: ${c.forecast.weatherFactor}\nconfidence: ${c.forecast.confidence}${c.forecast.corrected ? `\nhistorical correction: applied (factor ${c.forecast.correctionApplied}, ${c.forecast.correctionConfidence} confidence, ${c.forecast.correctionSamples} samples)` : ""}`
         : fmt(c.forecast),
     ),
   );
