@@ -291,6 +291,65 @@ async function fetchHistoricalWeather(dateStr, deps = {}) {
 }
 
 /**
+ * Fetches ONLY the daily max UV index for one date from the Open-Meteo
+ * Historical Forecast API (uv_index_max). The Archive API does not expose UV,
+ * so this is used to enrich existing snapshots without touching any other
+ * weather field, weather code, or the WF/baseline logic. Returns a
+ * non-negative number, or null when genuinely unavailable (failures included).
+ */
+async function fetchHistoricalUv(dateStr, deps = {}) {
+  const lat = plantConfig.latitude;
+  const lon = plantConfig.longitude;
+  if (!lat || !lon) return null;
+
+  try {
+    const params = new URLSearchParams({
+      latitude: String(lat),
+      longitude: String(lon),
+      start_date: dateStr,
+      end_date: dateStr,
+      daily: "uv_index_max",
+      timezone: "Asia/Kolkata",
+    });
+    const response = await fetch(
+      `https://historical-forecast-api.open-meteo.com/v1/forecast?${params}`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    const uv = Number(data.daily?.uv_index_max?.[0]);
+    return Number.isFinite(uv) && uv >= 0 ? uv : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Fills a missing historical uv_index for an EXISTING snapshot ONLY. Never
+ * creates a snapshot, never touches today/live rows, and never modifies any
+ * other weather field. It is a no-op whenever UV is already stored (a real
+ * zero is stored and treated as available). Returns a status string:
+ * 'filled' | 'unchanged' | 'no_snapshot' | 'skipped_today' | 'unavailable'.
+ */
+async function repairHistoricalUv(dateStr, plantId, deps = {}) {
+  const service = deps.archiveService || archiveService;
+  if (
+    typeof service.getWeatherSnapshot !== "function" ||
+    typeof service.updateWeatherUvIndex !== "function"
+  ) {
+    return "unavailable";
+  }
+  const existing = service.getWeatherSnapshot(plantId, dateStr);
+  if (!existing) return "no_snapshot";
+  if (dateStr >= archiveService.istDateString(new Date())) return "skipped_today";
+  if (existing.uv_index != null) return "unchanged";
+  const uv = await fetchHistoricalUv(dateStr, deps);
+  if (uv === null) return "unavailable";
+  service.updateWeatherUvIndex(plantId, dateStr, uv);
+  return "filled";
+}
+
+/**
  * True when an existing HISTORICAL weather snapshot is stale/incomplete and
  * should be refreshed from the archive API.
  *
@@ -883,8 +942,12 @@ async function collectWeatherForDates(dates, deps = {}) {
       log("WARN weather pass skipped (snapshot service unavailable)");
       return;
     }
+    const canFillUv =
+      typeof service.getWeatherSnapshot === "function" &&
+      typeof service.updateWeatherUvIndex === "function";
 
     let stored = 0;
+    let uvStored = 0;
     for (const dateStr of dates) {
       try {
         // collectWeatherSnapshot decides whether to store, keep, or repair.
@@ -895,11 +958,21 @@ async function collectWeatherForDates(dates, deps = {}) {
         // Weather is enhancement-only; a failure here is non-fatal.
         log(`WARN weather snapshot failed for ${dateStr}: ${err.message}`);
       }
+      // Opportunistic UV-only enrichment: fills missing historical UV for
+      // EXISTING snapshots from the Historical Forecast API. Never rewrites a
+      // stored UV, never creates snapshots, and never touches today/live rows.
+      if (canFillUv) {
+        try {
+          if ((await repairHistoricalUv(dateStr, plantId, deps)) === "filled") uvStored++;
+        } catch (err) {
+          log(`WARN historical UV fill failed for ${dateStr}: ${err.message}`);
+        }
+      }
       // Rate limit: ~1 request per second to the weather provider.
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    if (stored > 0) {
-      log(`Weather pass: snapshots collected=${stored}`);
+    if (stored > 0 || uvStored > 0) {
+      log(`Weather pass: snapshots collected=${stored}, historical uv filled=${uvStored}`);
     }
   } catch (err) {
     // The weather pass must never abort or alter generation collection.
@@ -983,6 +1056,8 @@ module.exports = {
   fetchHistoricalWeather,
   isStaleHistoricalSnapshot,
   collectWeatherSnapshot,
+  fetchHistoricalUv,
+  repairHistoricalUv,
   collectWeatherForDates,
   COLLECTOR_SESSION_KEY,
 };

@@ -146,6 +146,17 @@ function statements() {
       WHERE plant_id = ?
       ORDER BY snapshot_date ASC
     `),
+    weatherUpdateUv: db.prepare(`
+      UPDATE daily_weather_snapshot
+      SET uv_index = ?
+      WHERE plant_id = ? AND snapshot_date = ?
+    `),
+    weatherSelectMissingUv: db.prepare(`
+      SELECT snapshot_date
+      FROM daily_weather_snapshot
+      WHERE plant_id = ? AND snapshot_date < ? AND uv_index IS NULL
+      ORDER BY snapshot_date ASC
+    `),
     weatherCountByBucket: db.prepare(`
       SELECT w.cloud_cover, w.rain_probability, w.weather_code, w.uv_index,
              g.generation_kwh, g.generation_date
@@ -266,6 +277,34 @@ function getWeatherSnapshots({ from, to } = {}) {
 }
 
 /**
+ * UV-only update for an existing weather snapshot. Touches nothing but the
+ * uv_index column (collected_at and all other weather fields are preserved),
+ * so a UV backfill can never disturb generation/weather reconciliation or the
+ * observed-precipitation repair logic.
+ */
+function updateWeatherUvIndex(plantId, date, uvIndex) {
+  const info = statements().weatherUpdateUv.run(
+    Number.isFinite(Number(uvIndex)) ? Number(uvIndex) : null,
+    plantId,
+    date,
+  );
+  return { changed: info.changes > 0 };
+}
+
+/**
+ * Dates of existing historical weather snapshots (strictly before `before`)
+ * that still have no UV index. Used for UV-only backfills and the collector's
+ * opportunistic historical-UV repair pass.
+ */
+function getWeatherDatesMissingUv({ before } = {}) {
+  const s = statements();
+  const pid = PLANT_ID();
+  return s.weatherSelectMissingUv
+    .all(pid, before ?? istDateString(new Date()))
+    .map((row) => row.snapshot_date);
+}
+
+/**
  * Maps raw weather values to a discrete bucket signature string.
  * Two days with similar weather get the same signature, enabling
  * residual-based correction of the base prediction.
@@ -319,8 +358,14 @@ function baseWeatherFactor(cloudCover, rainProbability, weatherCode, uvIndex) {
   else if ([61, 63, 65, 80, 81, 82].includes(weatherCode)) f -= 0.15;
   else if ([95, 96, 99].includes(weatherCode)) f -= 0.22;
 
-  if (uvIndex >= 9) f += 0.03;
-  else if (uvIndex < 3) f -= 0.05;
+  // UV is a forecast-model quantity; the archive API never provides it, so a
+  // null uv_index means "genuinely unavailable" (the training pass never sees a
+  // negative UV, and the forecast side always has a real value). Treat null as
+  // neutral, matching weatherFeatures, instead of falling into the '< 3' branch.
+  if (uvIndex != null) {
+    if (uvIndex >= 9) f += 0.03;
+    else if (uvIndex < 3) f -= 0.05;
+  }
 
   return Math.max(0.6, Math.min(1.05, f));
 }
@@ -678,6 +723,8 @@ module.exports = {
   upsertWeatherSnapshot,
   getWeatherSnapshot,
   getWeatherSnapshots,
+  updateWeatherUvIndex,
+  getWeatherDatesMissingUv,
   computeWeatherBucket,
   baseWeatherFactor,
   getCorrectionFactor,
