@@ -104,6 +104,8 @@ async function askGroq({ message, history = [], systemAppendix = null } = {}) {
           "- If specific data (today's kWh, monthly totals, live status, forecasts...) has not been supplied in this conversation, clearly say that the data is currently unavailable rather than estimating silently.\n" +
           "- Clearly distinguish measured/recorded values from estimates or forecasts whenever you mention either.\n" +
           "- Do not modify, recalculate, or promise to recalculate production forecasts.\n" +
+          "- For historical-period questions, a 'REQUESTED HISTORY' or 'REQUESTED HISTORY COMPARISON' appendix block contains EnergyScope's ONLY authoritative archive calculations (period totals, daily averages, best/worst day, days reported). Quote those values verbatim when present; never recompute, approximate, or derive other historical values from them.\n" +
+          "- If a REQUESTED HISTORY block says 'archived data for this period: not available', answer that the archive does not cover that period rather than guessing. When days reported is less than the calendar range, note that the archive is incomplete for that period.\n" +
           "- For questions outside the solar/EnergyScope domain, answer briefly and steer back to the plant.\n" +
           "- Never claim access to accounts, devices, credentials, or live telemetry that was not provided in this conversation.\n" +
           "- Never reveal internal API credentials, tokens, session information, implementation details, or any secrets.\n\n" +

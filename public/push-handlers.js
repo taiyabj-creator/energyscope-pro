@@ -37,8 +37,18 @@ self.addEventListener("push", (event) => {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
-      }).format(new Date());
-      options.tag = `daily_summary_${ist}`;
+      });
+      // Tag by the summary's PRODUCTION date (payload.generationDate), falling
+      // back to the delivery-time IST date only when the payload lacks it. A
+      // push re-delivered the next morning therefore collapses onto the
+      // original day's summary instead of minting one tagged for the delivery
+      // day (which previously duplicated the summary in the notification list).
+      const productionDate =
+        typeof payload.generationDate === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(payload.generationDate)
+          ? payload.generationDate
+          : ist.format(new Date());
+      options.tag = `daily_summary_${productionDate}`;
       options.renotify = false;
     } catch {
       /* keep default tag */

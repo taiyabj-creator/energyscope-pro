@@ -66,6 +66,8 @@ async function getMaintenance() {
 async function updateMaintenance(update) {
   const current = await loadMaintenance();
 
+  current.history ??= [];
+
   if (update.lastCleaning && update.lastCleaning !== current.lastCleaning) {
     current.lastCleaning = update.lastCleaning;
 

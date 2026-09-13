@@ -167,19 +167,51 @@ function computeRank(todayKwh, archivedRows) {
   return 1 + others.filter((v) => v > todayKwh + 1e-9).length;
 }
 
-/** Build the two-paragraph daily summary body. */
-function buildSummaryBody({ todayKwh, rank }) {
+const SUMMARY_MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/** "YYYY-MM-DD" -> "12 Sep 2026" (the IST production date, never delivery date). */
+function formatSummaryDate(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || ""));
+  if (!m) return null;
+  const label = SUMMARY_MONTH_LABELS[Number(m[2]) - 1];
+  return label ? `${Number(m[3])} ${label} ${m[1]}` : null;
+}
+
+/** Build the daily summary body. Labels the IST production date (not the
+ *  delivery date) and, when known, the time the summary was calculated. */
+function buildSummaryBody({ todayKwh, rank, summaryDate, computedAt }) {
   const lines = [];
-  lines.push(
-    Number.isFinite(todayKwh)
-      ? `Today's generation: ${todayKwh.toFixed(2)} kWh.`
-      : "Today's generation data was unavailable.",
-  );
+  const labeledDate = formatSummaryDate(summaryDate);
+  if (labeledDate) {
+    lines.push(
+      Number.isFinite(todayKwh)
+        ? `Generation for ${labeledDate}: ${todayKwh.toFixed(2)} kWh.`
+        : `Generation data for ${labeledDate} was unavailable.`,
+    );
+  } else if (Number.isFinite(todayKwh)) {
+    lines.push(`Generation: ${todayKwh.toFixed(2)} kWh.`);
+  } else {
+    lines.push("Generation data was unavailable.");
+  }
   lines.push(
     rank === null
       ? "Production rank: Not enough historical data yet."
-      : `Today's production ranked #${rank} among all recorded production days.`,
+      : `Production ranked #${rank} among all recorded production days.`,
   );
+  if (computedAt) lines.push(`Calculated at ${istTimeString(computedAt)} IST.`);
   return lines.join("\n\n");
 }
 
@@ -337,8 +369,41 @@ function createMonitor(overrides = {}) {
       log(`Non-numeric PvProduction for ${summaryDate}: ${JSON.stringify(row.PvProduction)}.`);
       return null;
     }
+    if (kwh < 0) {
+      log(`Negative PvProduction for ${summaryDate} (${kwh}); treating as unsettled.`);
+      return null;
+    }
+
+    // 0.00 is ambiguous: either a genuine no-production day or UTL's scalar
+    // for an incomplete day (inverters/collector lag publishing; this was the
+    // root cause of the premature morning "0.00 kWh" summary). The monthly
+    // chart row carries no per-day status/finalization field, so the archive
+    // is the finalization oracle: the value is treated as settled only once
+    // the archive holds the canonical charts/monthly_row scalar for the date
+    // (the collector's scheduled reconcile keeps that row in sync with UTL).
+    // Until then the summary is deferred and the ledger claim stays uncreated
+    // so a later monitor tick retries.
+    if (kwh === 0 && !(await archiveHoldsFinalScalar(summaryDate))) {
+      log(
+        `UTL reports 0 kWh for ${summaryDate} but the archive has no canonical row yet; deferring summary.`,
+      );
+      return null;
+    }
 
     return { kwh };
+  }
+
+  /** True when the archive already holds a canonical charts/monthly_row scalar
+   *  for the date. Fails closed (false) so an unreadable archive defers the
+   *  summary rather than risk a premature 0.00. */
+  async function archiveHoldsFinalScalar(dateStr) {
+    try {
+      const rows = await deps.archive.getDailyRecords({ date: dateStr });
+      return rows.some((r) => String(r && r.source) === "charts/monthly_row");
+    } catch (err) {
+      log(`Archive read failed while judging completeness for ${dateStr} (${err.message}).`);
+      return false;
+    }
   }
 
   async function maybeSendDailySummary() {
@@ -408,8 +473,9 @@ function createMonitor(overrides = {}) {
       await deps.sendPush({
         kind: "daily_summary",
         title: "EnergyScope — Daily Production Summary",
-        body: buildSummaryBody({ todayKwh: figures.kwh, rank }),
+        body: buildSummaryBody({ todayKwh: figures.kwh, rank, summaryDate, computedAt: now }),
         url: "/history",
+        generationDate: summaryDate,
       });
       log(`Summary sent for ${summaryDate}.`);
     } catch (err) {
@@ -506,8 +572,14 @@ async function buildDailySummaryPayload(summaryDate, options = {}) {
   return {
     kind: "daily_summary",
     title: "EnergyScope — Daily Production Summary",
-    body: buildSummaryBody({ todayKwh: figures.kwh, rank }),
+    body: buildSummaryBody({
+      todayKwh: figures.kwh,
+      rank,
+      summaryDate: resolvedDate,
+      computedAt: new Date(),
+    }),
     url: "/history",
+    generationDate: resolvedDate,
   };
 }
 

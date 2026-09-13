@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarCheck, Droplets, HeartPulse, Wrench } from "lucide-react";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
@@ -41,6 +41,33 @@ function MaintenancePage() {
 
   const [cleaningDate, setCleaningDate] = useState("");
   const [inspectionDate, setInspectionDate] = useState("");
+  const [dirty, setDirty] = useState({ cleaning: false, inspection: false });
+  const [pendingField, setPendingField] = useState<"cleaning" | "inspection" | null>(null);
+
+  // Rehydrate the form from persisted data when it loads or refetches, unless
+  // the user is currently editing that field.
+  useEffect(() => {
+    if (data?.lastCleaning && !dirty.cleaning) setCleaningDate(data.lastCleaning);
+  }, [data?.lastCleaning, dirty.cleaning]);
+
+  useEffect(() => {
+    if (data?.lastInspection && !dirty.inspection) setInspectionDate(data.lastInspection);
+  }, [data?.lastInspection, dirty.inspection]);
+
+  const handleSave = (field: "cleaning" | "inspection") => {
+    const update =
+      field === "cleaning" ? { lastCleaning: cleaningDate } : { lastInspection: inspectionDate };
+
+    setPendingField(field);
+    updateMaintenance.mutate(update, {
+      onSettled: () => {
+        setPendingField(null);
+        setDirty((d) =>
+          field === "cleaning" ? { ...d, cleaning: false } : { ...d, inspection: false },
+        );
+      },
+    });
+  };
 
   const age = plantAge(plant?.installationDate ?? new Date().toISOString());
 
@@ -102,14 +129,11 @@ function MaintenancePage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  updateMaintenance.mutate({
-                    lastCleaning: cleaningDate,
-                  })
-                }
-                className="rounded-xl bg-primary px-4 py-2 text-primary-foreground"
+                onClick={() => handleSave("cleaning")}
+                disabled={pendingField === "cleaning"}
+                className="rounded-xl bg-primary px-4 py-2 text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Save
+                {pendingField === "cleaning" ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
@@ -127,18 +151,21 @@ function MaintenancePage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  updateMaintenance.mutate({
-                    lastInspection: inspectionDate,
-                  })
-                }
-                className="rounded-xl bg-primary px-4 py-2 text-primary-foreground"
+                onClick={() => handleSave("inspection")}
+                disabled={pendingField === "inspection"}
+                className="rounded-xl bg-primary px-4 py-2 text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Save
+                {pendingField === "inspection" ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
         </div>
+
+        {updateMaintenance.isError && (
+          <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            Could not save the maintenance date. Please try again.
+          </p>
+        )}
       </Panel>
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.3fr]">
         <Panel delay={0.1}>

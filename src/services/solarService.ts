@@ -9,6 +9,7 @@ import type {
   InverterInfo,
   LivePowerSnapshot,
   LoggerInfo,
+  MaintenanceEvent,
   MaintenanceState,
   MonthlyHistoryRow,
   NotificationItem,
@@ -555,10 +556,36 @@ function weatherDescription(code: number | undefined) {
   return "Unknown conditions";
 }
 
+/** Mirrors backend/services/maintenanceService.js scoreFromDueDays() exactly. */
+function scoreFromDueDays(daysRemaining: number, interval: number): number {
+  if (daysRemaining >= interval * 0.5) return 100;
+  if (daysRemaining >= interval * 0.25) return 95;
+  if (daysRemaining >= 0) return 90;
+
+  const overdue = Math.abs(daysRemaining);
+
+  if (overdue <= 7) return 80;
+  if (overdue <= 30) return 60;
+  if (overdue <= 60) return 40;
+
+  return 20;
+}
+
+interface MaintenanceApiResponse {
+  lastCleaning: string;
+  nextCleaning: string;
+  cleaningDueIn: number;
+  lastInspection: string;
+  nextInspection: string;
+  inspectionDueIn: number;
+  healthScore: number;
+  history: MaintenanceEvent[];
+}
+
 export async function fetchMaintenance(): Promise<MaintenanceState> {
   const plant = await fetchPlantInfo();
 
-  const maintenance = await apiRequest<any>("/api/maintenance");
+  const maintenance = await apiRequest<MaintenanceApiResponse>("/api/maintenance");
 
   return {
     installationDate: plant.installationDate,
@@ -572,17 +599,17 @@ export async function fetchMaintenance(): Promise<MaintenanceState> {
     cleaningDueIn: maintenance.cleaningDueIn,
     inspectionDueIn: maintenance.inspectionDueIn,
 
-    healthScore: 100,
+    healthScore: maintenance.healthScore,
 
     healthFactors: [
       {
         label: "Cleaning schedule",
-        score: maintenance.cleaningDueIn >= 0 ? 100 : 70,
+        score: scoreFromDueDays(maintenance.cleaningDueIn, 60),
         weightPct: 50,
       },
       {
         label: "Inspection schedule",
-        score: maintenance.inspectionDueIn >= 0 ? 100 : 70,
+        score: scoreFromDueDays(maintenance.inspectionDueIn, 180),
         weightPct: 50,
       },
     ],

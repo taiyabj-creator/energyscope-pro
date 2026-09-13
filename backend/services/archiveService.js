@@ -650,6 +650,52 @@ function getDailyRecords({ date, from, to } = {}) {
   return s.selectRange.all(PLANT_ID(), from, to);
 }
 
+/**
+ * Authoritative summary of archived generation over a date range, computed
+ * from canonicalGeneration() (check_monthly_value → raw kWh_monthly_row →
+ * generation_kwh) exactly like the prediction correction model - NEVER from
+ * the raw generation_kwh column, because legacy rows (e.g. Aug 2026 21/22)
+ * hold trapezoid-integrated values that can skew totals by a few kWh.
+ *
+ * Missing archive days are not zero-filled: aggregate totals/averages are
+ * computed only over rows that actually exist, and daysReported exposes the
+ * true count so callers can explain incomplete coverage.
+ *
+ * @param {{from?: string, to?: string}} bounds inclusive 'YYYY-MM-DD' range;
+ *   when both are omitted the full archive for the plant is used.
+ * @returns {null|{from?: string, to?: string, daysReported: number,
+ *   totalKwh: number, dailyAverageKwh: number,
+ *   bestDay: {date: string, kwh: number}, worstDay: {date: string, kwh: number}}}
+ */
+function getRangeSummary({ from, to } = {}) {
+  const s = statements();
+  const pid = PLANT_ID();
+  const rows = from && to ? s.selectRange.all(pid, from, to) : s.selectAllForPlant.all(pid);
+
+  const canonical = [];
+  for (const row of rows) {
+    const kwh = canonicalGeneration(row);
+    if (kwh !== null) canonical.push({ date: row.generation_date, kwh });
+  }
+  if (canonical.length === 0) return null;
+
+  let total = 0;
+  for (const e of canonical) total += e.kwh;
+  const best = canonical.reduce((a, b) => (b.kwh > a.kwh ? b : a));
+  const worst = canonical.reduce((a, b) => (b.kwh < a.kwh ? b : a));
+  const round2 = (v) => Number(Number(v).toFixed(2));
+
+  return {
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+    daysReported: canonical.length,
+    totalKwh: round2(total),
+    dailyAverageKwh: round2(total / canonical.length),
+    bestDay: { date: best.date, kwh: round2(best.kwh) },
+    worstDay: { date: worst.date, kwh: round2(worst.kwh) },
+  };
+}
+
 function getMonthlyTotal(month) {
   return statements().selectMonthly.get(PLANT_ID(), month) || null;
 }
@@ -714,12 +760,14 @@ module.exports = {
   startRun,
   finishRun,
   getDailyRecords,
+  getRangeSummary,
   getMonthlyTotal,
   getYearlyTotal,
   getLifetimeTotal,
   getCoverage,
   getLatestArchivedDate,
   istDateString,
+  canonicalGeneration,
   upsertWeatherSnapshot,
   getWeatherSnapshot,
   getWeatherSnapshots,

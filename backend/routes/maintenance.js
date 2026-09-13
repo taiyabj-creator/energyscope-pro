@@ -39,4 +39,22 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.put("/", async (req, res) => {
+  try {
+    const data = await updateMaintenance(req.body);
+
+    res.json({
+      success: true,
+      ...data,
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
+
 module.exports = router;

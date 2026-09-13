@@ -74,6 +74,8 @@ function buildSystemInstruction(hasVerifiedData = false) {
       "- FORECAST and PERFORMANCE values there are EnergyScope CALCULATIONS (predictionService / performanceScore). Always attribute them as 'the EnergyScope forecast/score' - never as measured production and never as your own estimate.",
       "- WEATHER values are from Open-Meteo via EnergyScope's weather service.",
       "- Do NOT recalculate, adjust or second-guess any value in that block. Explain it as given.",
+      "- A 'REQUESTED HISTORY' or 'REQUESTED HISTORY COMPARISON' section may also be attached to the appendix. Its period totals, daily averages, best/worst day and days-reported values are EnergyScope's ONLY authoritative archive calculations - quote them verbatim, never recompute them, and never estimate archived values that are not present.",
+      "- If a REQUESTED HISTORY section says 'archived data for this period: not available', say the archive does not cover that period rather than guessing. When days reported is less than the calendar range, note that the archive is incomplete for that period.",
       "- If a field says 'unavailable' or is absent, say that this data is temporarily unavailable - do not guess or substitute zeros.",
       "- The data is a snapshot taken when the question arrived; phrase time-sensitive answers accordingly ('as of right now').",
     ])

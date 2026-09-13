@@ -19,6 +19,7 @@ const {
   renderContextAppendix,
   contextHasAnyData,
 } = require("../services/plantContextService");
+const { buildHistoricalAppendix } = require("../services/archiveQueryService");
 
 const router = express.Router();
 
@@ -77,6 +78,25 @@ router.post("/chat", chatLimiter, async (req, res) => {
     }
   } catch (err) {
     console.warn(`[AI] Plant context unavailable (${err?.message}); answering without it.`);
+  }
+
+  // Query-aware historical context: deterministically resolve the period the
+  // user asked about (previous month, named month, trailing days, explicit
+  // range, or a two-period comparison) and append EnergyScope's authoritative
+  // canonical archive summary. This is computed per request AFTER the 60-second
+  // static cache on purpose: it is query-dependent and must never be cached.
+  // When nothing resolves, historicalAppendix stays null and the static
+  // context answers as before.
+  let historicalAppendix = null;
+  try {
+    historicalAppendix = buildHistoricalAppendix(message);
+  } catch (err) {
+    console.warn(`[AI] Historical appendix unavailable (${err?.message}); answering without it.`);
+  }
+  if (historicalAppendix) {
+    systemAppendix = systemAppendix
+      ? `${systemAppendix}\n\n${historicalAppendix}`
+      : historicalAppendix;
   }
 
   try {
