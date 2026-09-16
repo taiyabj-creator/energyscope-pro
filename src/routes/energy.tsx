@@ -4,8 +4,9 @@ import { MetricCard } from "@/components/cards/MetricCard";
 import { EnergyChart } from "@/components/charts/EnergyChart";
 import { PowerFlow } from "@/components/widgets/PowerFlow";
 import { Panel, PanelHeading } from "@/components/ui/primitives";
-import { useEnergyTotals, useLivePower } from "@/hooks/useSolarData";
-import { formatEnergy, formatPower } from "@/utils/format";
+import { useEnergyTotals, useTodayDaySeries } from "@/hooks/useSolarData";
+import { selectLatestDaySample } from "@/services/solarService";
+import { formatEnergy, formatLifetimeEnergy, formatPower } from "@/utils/format";
 
 export const Route = createFileRoute("/energy")({
   head: () => ({
@@ -26,20 +27,20 @@ export const Route = createFileRoute("/energy")({
 });
 
 function EnergyPage() {
-  const { data: live } = useLivePower();
+  const { data: todaySeries } = useTodayDaySeries();
   const { data: totals } = useEnergyTotals();
 
-  const solar = live?.solarPower ?? 0;
+  const currentPowerWatts = selectLatestDaySample(todaySeries)?.value ?? 0;
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Solar generation"
-          value={formatPower(solar).value}
-          unit={formatPower(solar).unit}
+          value={formatPower(currentPowerWatts).value}
+          unit={formatPower(currentPowerWatts).unit}
           icon={Sun}
           tone="solar"
-          footnote="Live from inverter"
+          footnote="Latest Day-chart sample"
         />
         <MetricCard
           title="Today"
@@ -67,8 +68,8 @@ function EnergyPage() {
         />
         <MetricCard
           title="Lifetime"
-          value={formatEnergy(totals?.total ?? 0).value}
-          unit={formatEnergy(totals?.total ?? 0).unit}
+          value={formatLifetimeEnergy(totals?.total ?? 0).value}
+          unit={formatLifetimeEnergy(totals?.total ?? 0).unit}
           icon={Leaf}
           tone="solar"
           footnote="Inverter lifetime total"
@@ -78,7 +79,7 @@ function EnergyPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
         <Panel delay={0.1}>
           <PanelHeading title="Power flow" subtitle="Solar generation and inverter output" />
-          <PowerFlow />
+          <PowerFlow powerWatts={currentPowerWatts} />
         </Panel>
         <Panel delay={0.15}>
           <EnergyChart />

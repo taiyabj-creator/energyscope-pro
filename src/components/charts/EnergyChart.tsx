@@ -113,8 +113,9 @@ export function EnergyChart() {
       selectedDate.getMonth() === today.getMonth()) ||
     (range === "year" && selectedDate.getFullYear() === today.getFullYear());
 
-  const unit = range === "day" ? "kW" : "kWh";
+  const unit = range === "day" ? "W" : "kWh";
   const isBar = range !== "day";
+  const seriesName = range === "day" ? "Power" : "Energy";
 
   return (
     <div>
@@ -242,7 +243,7 @@ export function EnergyChart() {
 
                 <Bar
                   dataKey="value"
-                  name="Energy"
+                  name={seriesName}
                   fill="var(--solar)"
                   radius={[6, 6, 0, 0]}
                   maxBarSize={range === "month" ? 42 : 120}
@@ -266,7 +267,7 @@ export function EnergyChart() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  name="Energy"
+                  name={seriesName}
                   stroke="var(--solar)"
                   strokeWidth={2}
                   fill="url(#fillSolar)"

@@ -42,6 +42,18 @@ export const useEnergySeries = (range: EnergyRange, selectedDate: Date) =>
     queryFn: () => api.fetchEnergySeries(range, selectedDate),
   });
 
+// Shared query for TODAY's Day-series.  The query key matches the graph's
+// useEnergySeries("day", today) key so TanStack Query dedupes them — one
+// UTL fetch shared by both the Current-power card and the Generation-profile
+// graph whenever the graph is on today's date.  refetchInterval keeps the
+// card (and graph) current with new samples as UTL publishes them.
+export const useTodayDaySeries = () =>
+  useQuery({
+    queryKey: ["energy-series", "day", new Date().toISOString().slice(0, 10)],
+    queryFn: () => api.fetchEnergySeries("day", new Date()),
+    refetchInterval: LIVE_REFRESH_INTERVAL_MS,
+  });
+
 export const useAnalyticsData = (year: number) =>
   useQuery({ queryKey: ["analytics", year], queryFn: () => api.fetchAnalyticsData(year) });
 

@@ -8,6 +8,11 @@ export function formatEnergy(kwh: number) {
   return { value: kwh.toFixed(kwh < 100 ? 2 : 1), unit: "kWh" };
 }
 
+export function formatLifetimeEnergy(kwh: number) {
+  if (Math.abs(kwh) >= 1000) return { value: (kwh / 1000).toFixed(3), unit: "MWh" };
+  return { value: kwh.toFixed(3), unit: "kWh" };
+}
+
 /**
  * Percentage change versus the previous period. Returns null when the
  * comparison cannot be expressed honestly: no historical value, or a previous

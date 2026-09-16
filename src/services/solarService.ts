@@ -105,6 +105,15 @@ function chartValue(point: ChartPoint, source: EnergySource): number {
   return normalizeEnergyUnit(point.PvProduction, source);
 }
 
+/**
+ * Returns the Day-series sample with the greatest timeMinutes (latest in the
+ * day).  Returns null when the series is empty or undefined.
+ */
+export function selectLatestDaySample(series?: SeriesPoint[]): SeriesPoint | null {
+  if (!series || series.length === 0) return null;
+  return series.reduce((max, p) => ((p.timeMinutes ?? 0) > (max.timeMinutes ?? 0) ? p : max));
+}
+
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -272,8 +281,11 @@ export async function fetchEnergySeries(
 
       return {
         label: String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0"),
+        // The UTL daily chart samples instantaneous power in watts; keep the raw
+        // value so the Day graph displays the W scale directly.
         value: chartValue(p, "daily"),
         compare: 0,
+        timeMinutes,
       };
     });
   }

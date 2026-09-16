@@ -71,6 +71,8 @@ export interface SeriesPoint {
   value: number;
   /** optional secondary series, e.g. consumption or previous period */
   compare?: number;
+  /** minutes since midnight for Day-series samples (UTL timeMinutes) */
+  timeMinutes?: number;
 }
 
 export type EnergyRange = "day" | "month" | "year" | "total";

@@ -113,12 +113,12 @@ function FlowNode({
   );
 }
 
-export function PowerFlow() {
+export function PowerFlow({ powerWatts }: { powerWatts: number }) {
   const { data: live } = useLivePower();
   const { data: logger } = useLogger();
   const { data: plant } = usePlantInfo();
 
-  const solarPower = live?.solarPower ?? 0;
+  const solarPower = powerWatts;
   const solar = formatPower(solarPower);
   const capacityPercentage = getCapacityPercentage(solarPower, plant?.capacityKw);
   const loggerOnline = logger?.status === "online";

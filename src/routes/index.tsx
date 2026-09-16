@@ -12,10 +12,12 @@ import {
   useLogger,
   usePlantInfo,
   usePrediction,
+  useTodayDaySeries,
   useWeatherNow,
 } from "@/hooks/useSolarData";
+import { selectLatestDaySample } from "@/services/solarService";
 import { useAlerts } from "@/hooks/useAlerts";
-import { formatEnergy, formatPower, trendPct } from "@/utils/format";
+import { formatEnergy, formatLifetimeEnergy, formatPower, trendPct } from "@/utils/format";
 import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
 import { getCapacityPercentage } from "@/utils/capacity";
 import { DashboardSkeleton } from "@/components/dashboard/loading/DashboardSkeleton";
@@ -41,6 +43,7 @@ export const Route = createFileRoute("/")({
 
 function DashboardPage() {
   const { data: live, isLoading } = useLivePower();
+  const { data: todaySeries, isLoading: todaySeriesLoading } = useTodayDaySeries();
   const { data: totals } = useEnergyTotals();
   const { data: plant } = usePlantInfo();
   const { data: inverter } = useInverter();
@@ -49,8 +52,10 @@ function DashboardPage() {
   const { alerts, count } = useAlerts();
   const { data: prediction } = usePrediction();
 
-  const solar = formatPower(live?.solarPower ?? 0);
-  const capacityPercentage = getCapacityPercentage(live?.solarPower ?? 0, plant?.capacityKw);
+  const latestSample = selectLatestDaySample(todaySeries);
+  const currentPowerWatts = latestSample?.value ?? 0;
+  const solar = formatPower(currentPowerWatts);
+  const capacityPercentage = getCapacityPercentage(currentPowerWatts, plant?.capacityKw);
   const freshness = formatMeasurementFreshness(live?.timestamp);
   if (isLoading && !live && !totals && !plant && !inverter) {
     return <DashboardSkeleton />;
@@ -88,8 +93,8 @@ function DashboardPage() {
           unit={solar.unit}
           icon={Sun}
           tone="solar"
-          footnote={`${capacityPercentage ?? "Not supported"}${capacityPercentage === null ? "" : "% of installed capacity"} · ${freshness}`}
-          loading={isLoading}
+          footnote={`${capacityPercentage ?? "Not supported"}${capacityPercentage === null ? "" : "% of installed capacity"} · ${latestSample ? `Latest sample ${formatSampleTime(latestSample.timeMinutes)}` : "No samples yet today"}`}
+          loading={todaySeriesLoading}
           delay={0}
         />
         <MetricCard
@@ -143,13 +148,13 @@ function DashboardPage() {
             title="Live power flow"
             subtitle="Latest available AC output from the solar array"
             action={
-              <Chip tone={(live?.solarPower ?? 0) > 40 ? "positive" : "default"}>
-                <StatusDot status={(live?.solarPower ?? 0) > 40 ? "online" : "warning"} />
-                {(live?.solarPower ?? 0) > 40 ? "Producing" : "Standby"}
+              <Chip tone={currentPowerWatts > 40 ? "positive" : "default"}>
+                <StatusDot status={currentPowerWatts > 40 ? "online" : "warning"} />
+                {currentPowerWatts > 40 ? "Producing" : "Standby"}
               </Chip>
             }
           />
-          <PowerFlow />
+          <PowerFlow powerWatts={currentPowerWatts} />
         </Panel>
       </div>
 
@@ -182,8 +187,8 @@ function DashboardPage() {
         />
         <MetricCard
           title="Lifetime generation"
-          value={formatEnergy(totals?.total ?? 0).value}
-          unit={formatEnergy(totals?.total ?? 0).unit}
+          value={formatLifetimeEnergy(totals?.total ?? 0).value}
+          unit={formatLifetimeEnergy(totals?.total ?? 0).unit}
           icon={Leaf}
           footnote={`Since ${plant ? new Date(plant.installationDate).getFullYear() : "—"}`}
           delay={0.4}
@@ -276,6 +281,15 @@ function DashboardPage() {
       </Panel>
     </motion.div>
   );
+}
+
+function formatSampleTime(timeMinutes?: number): string {
+  if (timeMinutes == null || !Number.isFinite(timeMinutes)) return "unavailable";
+  const total = Math.round(timeMinutes);
+  const hours = Math.floor(total / 60) % 24;
+  const minutes = total % 60;
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${String(minutes).padStart(2, "0")} ${hours >= 12 ? "PM" : "AM"}`;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {

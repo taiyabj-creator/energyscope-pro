@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { MapPin, Sun, Users } from "lucide-react";
 import { Panel, PanelHeading } from "@/components/ui/primitives";
 import { useEnergyTotals, usePlantInfo } from "@/hooks/useSolarData";
-import { formatDate, formatEnergy, plantAge } from "@/utils/format";
+import { formatDate, formatLifetimeEnergy, plantAge } from "@/utils/format";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -27,7 +27,7 @@ function ProfilePage() {
   const { data: plant } = usePlantInfo();
   const { data: totals } = useEnergyTotals();
   const age = plantAge(plant?.installationDate ?? new Date().toISOString());
-  const lifetime = formatEnergy(totals?.total ?? 0);
+  const lifetime = formatLifetimeEnergy(totals?.total ?? 0);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
