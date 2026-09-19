@@ -29,11 +29,11 @@
  * UNKNOWN (startup) never triggers a notification in either direction.
  * partiallyOffline counts as ONLINE (still producing).
  *
- * DAILY SUMMARY: one per plant per calendar day (Asia/Kolkata), sent at
- * approximately sunset + 1 hour IST. The sunset gate uses today's IST date,
- * so at midnight the gate blocks (today's sunset hasn't happened yet).
- * Persisted in notifications.db BEFORE sending (claim-first), so restarts
- * cannot double-send. At-most-once semantics by design.
+ * DAILY SUMMARY: DISABLED. maybeSendDailySummary() is no longer invoked from
+ * tick(), so no daily_summary notifications are generated or sent. The
+ * function, its idempotency ledger (daily_summary_sent) and the dev-only
+ * /notifications/test/summary simulation remain for reference/testing.
+ * Inverter online/offline notifications are unaffected.
  */
 
 const collector = require("./archiveCollector");
@@ -498,7 +498,6 @@ function createMonitor(overrides = {}) {
     running = true;
     try {
       await observeInverter();
-      await maybeSendDailySummary();
       // Persistent push retries ride the existing monitor loop; only rows
       // whose next_attempt_at is due actually deliver (~every 30 minutes).
       if (typeof deps.push.processDueRetries === "function") {
