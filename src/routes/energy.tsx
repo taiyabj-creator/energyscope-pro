@@ -4,7 +4,7 @@ import { MetricCard } from "@/components/cards/MetricCard";
 import { EnergyChart } from "@/components/charts/EnergyChart";
 import { PowerFlow } from "@/components/widgets/PowerFlow";
 import { Panel, PanelHeading } from "@/components/ui/primitives";
-import { useEnergyTotals, useTodayDaySeries } from "@/hooks/useSolarData";
+import { useEnergyTotals, useLogger, useTodayDaySeries } from "@/hooks/useSolarData";
 import { selectLatestDaySample } from "@/services/solarService";
 import { formatEnergy, formatLifetimeEnergy, formatPower } from "@/utils/format";
 
@@ -29,8 +29,10 @@ export const Route = createFileRoute("/energy")({
 function EnergyPage() {
   const { data: todaySeries } = useTodayDaySeries();
   const { data: totals } = useEnergyTotals();
+  const { data: logger } = useLogger();
 
-  const currentPowerWatts = selectLatestDaySample(todaySeries)?.value ?? 0;
+  const loggerOnline = logger?.status === "online";
+  const currentPowerWatts = loggerOnline ? (selectLatestDaySample(todaySeries)?.value ?? 0) : 0;
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -40,7 +42,7 @@ function EnergyPage() {
           unit={formatPower(currentPowerWatts).unit}
           icon={Sun}
           tone="solar"
-          footnote="Latest Day-chart sample"
+          footnote={logger && !loggerOnline ? "Logger offline" : "Latest Day-chart sample"}
         />
         <MetricCard
           title="Today"

@@ -53,7 +53,8 @@ function DashboardPage() {
   const { data: prediction } = usePrediction();
 
   const latestSample = selectLatestDaySample(todaySeries);
-  const currentPowerWatts = latestSample?.value ?? 0;
+  const loggerOnline = logger?.status === "online";
+  const currentPowerWatts = loggerOnline ? (latestSample?.value ?? 0) : 0;
   const solar = formatPower(currentPowerWatts);
   const capacityPercentage = getCapacityPercentage(currentPowerWatts, plant?.capacityKw);
   const freshness = formatMeasurementFreshness(live?.timestamp);
@@ -93,7 +94,11 @@ function DashboardPage() {
           unit={solar.unit}
           icon={Sun}
           tone="solar"
-          footnote={`${capacityPercentage ?? "Not supported"}${capacityPercentage === null ? "" : "% of installed capacity"} · ${latestSample ? `Latest sample ${formatSampleTime(latestSample.timeMinutes)}` : "No samples yet today"}`}
+          footnote={
+            logger && !loggerOnline
+              ? "Logger offline · solar readings unavailable"
+              : `${capacityPercentage ?? "Not supported"}${capacityPercentage === null ? "" : "% of installed capacity"} · ${latestSample ? `Latest sample ${formatSampleTime(latestSample.timeMinutes)}` : "No samples yet today"}`
+          }
           loading={todaySeriesLoading}
           delay={0}
         />
@@ -148,9 +153,9 @@ function DashboardPage() {
             title="Live power flow"
             subtitle="Latest available AC output from the solar array"
             action={
-              <Chip tone={currentPowerWatts > 40 ? "positive" : "default"}>
-                <StatusDot status={currentPowerWatts > 40 ? "online" : "warning"} />
-                {currentPowerWatts > 40 ? "Producing" : "Standby"}
+              <Chip tone={loggerOnline && currentPowerWatts > 40 ? "positive" : "default"}>
+                <StatusDot status={loggerOnline && currentPowerWatts > 40 ? "online" : "warning"} />
+                {loggerOnline ? (currentPowerWatts > 40 ? "Producing" : "Standby") : "Offline"}
               </Chip>
             }
           />
