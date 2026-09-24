@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { createFileRoute } from "@tanstack/react-router";
 import { Activity, CalendarRange, Cpu, Gauge, Leaf, Sun, Sunrise, TrendingUp } from "lucide-react";
+import { FlipMetricCard } from "@/components/cards/FlipMetricCard";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { EnergyChart } from "@/components/charts/EnergyChart";
 import { PowerFlow } from "@/components/widgets/PowerFlow";
 import { Chip, Panel, PanelHeading, StatusDot } from "@/components/ui/primitives";
 import {
+  useArchiveSummary,
   useEnergyTotals,
   useInverter,
   useLivePower,
@@ -17,7 +20,13 @@ import {
 } from "@/hooks/useSolarData";
 import { selectLatestDaySample } from "@/services/solarService";
 import { useAlerts } from "@/hooks/useAlerts";
-import { formatEnergy, formatLifetimeEnergy, formatPower, trendPct } from "@/utils/format";
+import {
+  formatDate,
+  formatEnergy,
+  formatLifetimeEnergy,
+  formatPower,
+  trendPct,
+} from "@/utils/format";
 import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
 import { getCapacityPercentage } from "@/utils/capacity";
 import { DashboardSkeleton } from "@/components/dashboard/loading/DashboardSkeleton";
@@ -41,6 +50,8 @@ export const Route = createFileRoute("/")({
   component: DashboardPage,
 });
 
+type DataSource = "utl" | "archive";
+
 function DashboardPage() {
   const { data: live, isLoading } = useLivePower();
   const { data: todaySeries, isLoading: todaySeriesLoading } = useTodayDaySeries();
@@ -52,6 +63,20 @@ function DashboardPage() {
   const { alerts, count } = useAlerts();
   const { data: prediction } = usePrediction();
 
+  // Per-card source toggle between UTL and the canonical Archive. Session-only
+  // (component state): each of the three Energy Summary cards toggles
+  // independently and resets on reload by design.
+  const [todaySource, setTodaySource] = useState<DataSource>("utl");
+  const [monthSource, setMonthSource] = useState<DataSource>("utl");
+  const [yearSource, setYearSource] = useState<DataSource>("utl");
+
+  const archiveEnabled =
+    todaySource === "archive" || monthSource === "archive" || yearSource === "archive";
+  const { data: archive } = useArchiveSummary(archiveEnabled);
+
+  const toggleSource = (setSource: React.Dispatch<React.SetStateAction<DataSource>>) => () =>
+    setSource((current) => (current === "utl" ? "archive" : "utl"));
+
   const latestSample = selectLatestDaySample(todaySeries);
   const loggerOnline = logger?.status === "online";
   const currentPowerWatts = loggerOnline ? (latestSample?.value ?? 0) : 0;
@@ -61,6 +86,19 @@ function DashboardPage() {
   if (isLoading && !live && !totals && !plant && !inverter) {
     return <DashboardSkeleton />;
   }
+
+  // --- Energy Summary cards: UTL ⇄ Archive flip -------------------------
+  // Each card is a single tap target that flips between the live UTL face and
+  // the canonical Archive face (/api/archive/summary): IST calendar days,
+  // canonical generation, and "No archive yet" instead of 0 when a period has
+  // no row. Both faces stay mounted in FlipMetricCard; the hidden face is
+  // invisible (backface-visibility) so the card height never changes.
+  const todayArchiveValue = archive?.today ?? null;
+  const monthArchiveValue = archive?.month ?? null;
+  const yearArchiveValue = archive?.year ?? null;
+  const todayOnUtl = todaySource === "utl";
+  const monthOnUtl = monthSource === "utl";
+  const yearOnUtl = yearSource === "utl";
 
   return (
     <motion.div
@@ -102,19 +140,65 @@ function DashboardPage() {
           loading={todaySeriesLoading}
           delay={0}
         />
-        <MetricCard
+        <FlipMetricCard
           title="Today's generation"
-          value={formatEnergy(totals?.today ?? 0).value}
-          unit="kWh"
-          icon={Sunrise}
-          tone="solar"
-          trend={totals ? trendPct(totals.today, totals.todayPrevious) : null}
-          footnote={
-            totals && totals.todayPrevious === null
-              ? "No comparison data for yesterday"
-              : "vs yesterday"
+          flipped={!todayOnUtl}
+          onToggle={toggleSource(setTodaySource)}
+          front={
+            <MetricCard
+              title="Today's generation"
+              value={formatEnergy(totals?.today ?? 0).value}
+              unit="kWh"
+              icon={Sunrise}
+              tone="solar"
+              trend={totals ? trendPct(totals.today, totals.todayPrevious) : null}
+              footnote={
+                totals && totals.todayPrevious === null
+                  ? "No comparison data for yesterday"
+                  : "vs yesterday"
+              }
+              source={{
+                label: "UTL Data",
+                onToggle: toggleSource(setTodaySource),
+              }}
+              delay={0.1}
+            />
           }
-          delay={0.1}
+          back={
+            <MetricCard
+              title="Today's generation"
+              value={
+                todayArchiveValue === null
+                  ? archive
+                    ? "No archive yet"
+                    : ""
+                  : formatEnergy(todayArchiveValue).value
+              }
+              unit={todayArchiveValue !== null ? formatEnergy(todayArchiveValue).unit : undefined}
+              icon={Sunrise}
+              tone="solar"
+              trend={
+                todayArchiveValue !== null && archive?.todayPrevious != null
+                  ? trendPct(todayArchiveValue, archive.todayPrevious)
+                  : null
+              }
+              footnote={
+                todayArchiveValue === null
+                  ? archive
+                    ? "Today not archived yet"
+                    : undefined
+                  : archive?.todayPrevious === null
+                    ? "No archived value for yesterday"
+                    : "vs yesterday"
+              }
+              loading={!archive}
+              source={{
+                label: "Archive Data",
+                onToggle: toggleSource(setTodaySource),
+              }}
+              delay={0.1}
+            />
+          }
         />
         <MetricCard
           title="Expected Today"
@@ -164,31 +248,121 @@ function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
+        <FlipMetricCard
           title="This month"
-          value={formatEnergy(totals?.month ?? 0).value}
-          unit={formatEnergy(totals?.month ?? 0).unit}
-          icon={CalendarRange}
-          trend={totals ? trendPct(totals.month, totals.monthPrevious) : null}
-          footnote={
-            totals && totals.monthPrevious === null
-              ? "No comparison data for last month"
-              : "vs last month"
+          flipped={!monthOnUtl}
+          onToggle={toggleSource(setMonthSource)}
+          front={
+            <MetricCard
+              title="This month"
+              value={formatEnergy(totals?.month ?? 0).value}
+              unit={formatEnergy(totals?.month ?? 0).unit}
+              icon={CalendarRange}
+              trend={totals ? trendPct(totals.month, totals.monthPrevious) : null}
+              footnote={
+                totals && totals.monthPrevious === null
+                  ? "No comparison data for last month"
+                  : "vs last month"
+              }
+              source={{
+                label: "UTL Data",
+                onToggle: toggleSource(setMonthSource),
+              }}
+              delay={0.3}
+            />
           }
-          delay={0.3}
+          back={
+            <MetricCard
+              title="This month"
+              value={
+                monthArchiveValue === null
+                  ? archive
+                    ? "No archive yet"
+                    : ""
+                  : formatEnergy(monthArchiveValue).value
+              }
+              unit={monthArchiveValue !== null ? formatEnergy(monthArchiveValue).unit : undefined}
+              icon={CalendarRange}
+              trend={
+                monthArchiveValue !== null && archive?.monthPrevious != null
+                  ? trendPct(monthArchiveValue, archive.monthPrevious)
+                  : null
+              }
+              footnote={
+                monthArchiveValue === null
+                  ? archive
+                    ? "No archived days this month yet"
+                    : undefined
+                  : archive?.monthLatest
+                    ? `Up to ${formatDate(archive.monthLatest)} · ${archive.monthDays} day${archive.monthDays === 1 ? "" : "s"}`
+                    : "vs last month"
+              }
+              loading={!archive}
+              source={{
+                label: "Archive Data",
+                onToggle: toggleSource(setMonthSource),
+              }}
+              delay={0.3}
+            />
+          }
         />
-        <MetricCard
+        <FlipMetricCard
           title="This year"
-          value={formatEnergy(totals?.year ?? 0).value}
-          unit={formatEnergy(totals?.year ?? 0).unit}
-          icon={TrendingUp}
-          trend={totals ? trendPct(totals.year, totals.yearPrevious) : null}
-          footnote={
-            totals && totals.yearPrevious === null
-              ? "No comparison data for last year"
-              : "vs last year"
+          flipped={!yearOnUtl}
+          onToggle={toggleSource(setYearSource)}
+          front={
+            <MetricCard
+              title="This year"
+              value={formatEnergy(totals?.year ?? 0).value}
+              unit={formatEnergy(totals?.year ?? 0).unit}
+              icon={TrendingUp}
+              trend={totals ? trendPct(totals.year, totals.yearPrevious) : null}
+              footnote={
+                totals && totals.yearPrevious === null
+                  ? "No comparison data for last year"
+                  : "vs last year"
+              }
+              source={{
+                label: "UTL Data",
+                onToggle: toggleSource(setYearSource),
+              }}
+              delay={0.35}
+            />
           }
-          delay={0.35}
+          back={
+            <MetricCard
+              title="This year"
+              value={
+                yearArchiveValue === null
+                  ? archive
+                    ? "No archive yet"
+                    : ""
+                  : formatEnergy(yearArchiveValue).value
+              }
+              unit={yearArchiveValue !== null ? formatEnergy(yearArchiveValue).unit : undefined}
+              icon={TrendingUp}
+              trend={
+                yearArchiveValue !== null && archive?.yearPrevious != null
+                  ? trendPct(yearArchiveValue, archive.yearPrevious)
+                  : null
+              }
+              footnote={
+                yearArchiveValue === null
+                  ? archive
+                    ? "No archived data this year yet"
+                    : undefined
+                  : archive?.yearFirst
+                    ? `Since ${formatDate(archive.yearFirst)} · ${archive.yearDays} day${archive.yearDays === 1 ? "" : "s"}`
+                    : "No comparison data for last year"
+              }
+              loading={!archive}
+              source={{
+                label: "Archive Data",
+                onToggle: toggleSource(setYearSource),
+              }}
+              delay={0.35}
+            />
+          }
         />
         <MetricCard
           title="Lifetime generation"

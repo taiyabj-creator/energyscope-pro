@@ -100,6 +100,18 @@ export const useArchiveTotalHistory = (enabled: boolean) =>
     enabled,
   });
 
+// Canonical archive summary for the dashboard Energy Summary cards' Archive
+// source. Only fetched while at least one summary card is showing Archive
+// data; the interval keeps today's row fresh once it is archived.
+export const useArchiveSummary = (enabled = true) =>
+  useQuery({
+    queryKey: ["archive-summary"],
+    queryFn: archiveApi.fetchArchiveSummary,
+    enabled,
+    refetchInterval: LIVE_REFRESH_INTERVAL_MS,
+    staleTime: LIVE_REFRESH_INTERVAL_MS / 2,
+  });
+
 export const useWeather = (latitude: number | undefined, longitude: number | undefined) =>
   useQuery({
     queryKey: ["weather", latitude, longitude],

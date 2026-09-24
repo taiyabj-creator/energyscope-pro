@@ -23,6 +23,34 @@ export interface EnergyTotals {
   yearPrevious: number | null;
 }
 
+/**
+ * Canonical archive summary for the Energy Summary cards' Archive source
+ * (served by /api/archive/summary). Dates are Asia/Kolkata calendar days and
+ * values use canonicalGeneration precedence. null means "no archived record for
+ * this period yet" — never a zero.
+ */
+export interface ArchiveEnergySummary {
+  /** IST date string the summary was computed for, e.g. "2026-09-24". */
+  asOfDate: string;
+  today: number | null;
+  todayPrevious: number | null;
+  month: number | null;
+  monthPrevious: number | null;
+  /** Archived days reported for the current month (1st .. monthLatest). */
+  monthDays: number;
+  /** Day-of-month of the latest archived day in the current month (0 = none). */
+  monthExpectedDays: number;
+  monthLatest: string | null;
+  year: number | null;
+  yearPrevious: number | null;
+  /** Archived days reported for the current year (yearFirst .. yearLatest). */
+  yearDays: number;
+  yearFirst: string | null;
+  yearLatest: string | null;
+  firstDataDate: string | null;
+  latestDate: string | null;
+}
+
 export interface BatteryState {
   installed: boolean;
   soc: number | null;

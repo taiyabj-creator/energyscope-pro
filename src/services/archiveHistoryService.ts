@@ -12,7 +12,12 @@
  * the UTL yearly/total x1000 normalization that lives in solarService.ts.
  */
 import { apiRequest } from "@/api/client";
-import type { DailyHistoryRow, MonthlyHistoryRow, YearlyHistoryRow } from "@/types/solar";
+import type {
+  ArchiveEnergySummary,
+  DailyHistoryRow,
+  MonthlyHistoryRow,
+  YearlyHistoryRow,
+} from "@/types/solar";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -126,4 +131,33 @@ export async function fetchArchiveTotal(): Promise<YearlyHistoryRow[]> {
     totals.first_day && totals.last_day ? `${totals.first_day} – ${totals.last_day}` : "Lifetime";
 
   return [{ year: period, generation: Number(totals.generation_kwh) }];
+}
+
+const EMPTY_SUMMARY: ArchiveEnergySummary = {
+  asOfDate: "",
+  today: null,
+  todayPrevious: null,
+  month: null,
+  monthPrevious: null,
+  monthDays: 0,
+  monthExpectedDays: 0,
+  monthLatest: null,
+  year: null,
+  yearPrevious: null,
+  yearDays: 0,
+  yearFirst: null,
+  yearLatest: null,
+  firstDataDate: null,
+  latestDate: null,
+};
+
+/**
+ * Canonical dashboard archive summary (today / month / year + previous-period
+ * comparisons). A 404 or absent body degrades to an all-null summary so the
+ * cards show "No archive yet" instead of failing the whole dashboard.
+ */
+export async function fetchArchiveSummary(): Promise<ArchiveEnergySummary> {
+  const data = await getArchiveData<Partial<ArchiveEnergySummary>>("/api/archive/summary");
+  if (!data) return EMPTY_SUMMARY;
+  return { ...EMPTY_SUMMARY, ...data };
 }

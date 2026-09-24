@@ -29,6 +29,19 @@ router.get("/status", async (req, res) => {
   }
 });
 
+// Canonical dashboard summary (Asia/Kolkata calendar boundaries,
+// canonicalGeneration math) powering the Energy Summary cards' Archive
+// source. One request covers today / this month / this year plus their
+// previous-period trend comparisons.
+router.get("/summary", async (req, res) => {
+  try {
+    res.json({ success: true, data: archiveService.getArchiveSummary() });
+  } catch (err) {
+    console.error("[ARCHIVE] summary error:", err.message);
+    res.status(500).json({ success: false, message: "Archive unavailable." });
+  }
+});
+
 router.get("/daily", async (req, res) => {
   try {
     const { date, from, to } = req.query;

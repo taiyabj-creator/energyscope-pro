@@ -78,6 +78,24 @@ function log(...args) {
 }
 
 // ---------------------------------------------------------------------------
+// Manual override protection
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a stored row is an operator-entered manual_override.
+ *
+ * Manual override rows are IMMUTABLE to the collector: UTL reconciliation must
+ * never overwrite them, the validity scan must treat them as already-verified
+ * archived days (never "inconsistent"/re-collected), and no UPDATE may be
+ * attempted. This protects days where the UTL scalar is wrong (e.g. a meter
+ * read logged with a corrected value by an operator) from being clobbered by
+ * the next hourly reconciliation.
+ */
+function isManualOverride(row) {
+  return !!row && String(row.source) === "manual_override";
+}
+
+// ---------------------------------------------------------------------------
 // Curve math
 // ---------------------------------------------------------------------------
 
@@ -434,6 +452,18 @@ async function collectDate(dateStr, deps = {}) {
   const service = deps.archiveService || archiveService;
   const plantId = service.PLANT_ID();
 
+  // A day with a stored manual_override row is operator-locked: do not fetch
+  // it from UTL, do not store power curves over it, and never attempt an
+  // UPDATE. Both scheduled and explicit --date/--from..--to runs hit this.
+  const existingRow = service
+    .getDailyRecords({ date: dateStr })
+    .find((r) => String(r.plant_id) === String(plantId));
+  if (isManualOverride(existingRow)) {
+    log(`${dateStr} manual_override day preserved (${
+      existingRow.generation_kwh} kWh); skipped.`);
+    return { result: "unchanged", row: existingRow };
+  }
+
   const session = await ensureCollectorSession(deps);
 
   if (!deps.skipPlantCheck) {
@@ -668,6 +698,7 @@ async function reconcileCanonicalValues({ from, to }, deps = {}) {
         .getDailyRecords({ date: dateStr })
         .find((r) => String(r.plant_id) === String(plantId));
       if (!existing) summary.missing++;
+      else if (isManualOverride(existing)) summary.alreadyCanonical++;
       else summary.awaitingCanonical++;
       continue;
     }
@@ -678,6 +709,14 @@ async function reconcileCanonicalValues({ from, to }, deps = {}) {
 
     if (!existing) {
       summary.missing++;
+      continue;
+    }
+
+    // Manual override days are operator-locked: never reconciled, relabeled or
+    // corrected, even if UTL's scalar differs or matches.
+    if (isManualOverride(existing)) {
+      summary.alreadyCanonical++;
+      log(`RECONCILE ${dateStr}: manual_override day preserved (${existing.generation_kwh} kWh).`);
       continue;
     }
 
@@ -732,6 +771,7 @@ async function reconcileCanonicalValues({ from, to }, deps = {}) {
 /**
  * Verifies an existing solar_generation_daily row against the collector's own
  * acceptance rules:
+ *   - manual_override rows are always valid (operator-locked, never re-checked)
  *   - generation_kwh present, finite, non-negative
  *   - source is one of the known provenance labels
  *   - charts/monthly_row rows hold the canonical UTL scalar and are always
@@ -744,6 +784,10 @@ async function reconcileCanonicalValues({ from, to }, deps = {}) {
  */
 function isArchivedRecordValid(row) {
   if (!row) return false;
+
+  // Manual override days are operator-entered immutable rows: always valid,
+  // never "inconsistent"/re-collected and never rewritten by a scanner.
+  if (isManualOverride(row)) return true;
 
   const kwh = Number(row.generation_kwh);
   if (!Number.isFinite(kwh) || kwh < 0) return false;
@@ -1050,6 +1094,7 @@ module.exports = {
   runGapAwareCollection,
   computeGapScanRange,
   isArchivedRecordValid,
+  isManualOverride,
   previousCompletedIstDay,
   reconcileCanonicalValues,
   fetchMonthlyScalars,

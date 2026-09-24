@@ -664,16 +664,22 @@ function getDailyRecords({ date, from, to } = {}) {
  * @param {{from?: string, to?: string}} bounds inclusive 'YYYY-MM-DD' range;
  *   when both are omitted the full archive for the plant is used.
  * @returns {null|{from?: string, to?: string, daysReported: number,
+ *   expectedDays: number, missingDays: string[],
  *   totalKwh: number, dailyAverageKwh: number,
  *   bestDay: {date: string, kwh: number}, worstDay: {date: string, kwh: number}}}
+ *   expectedDays = calendar days spanned by the requested inclusive range;
+ *   missingDays lists every date INSIDE that range with no archived row (so
+ *   callers can explain partial coverage honestly, never zero-filling).
  */
 function getRangeSummary({ from, to } = {}) {
   const s = statements();
   const pid = PLANT_ID();
   const rows = from && to ? s.selectRange.all(pid, from, to) : s.selectAllForPlant.all(pid);
 
+  const present = new Set();
   const canonical = [];
   for (const row of rows) {
+    present.add(row.generation_date);
     const kwh = canonicalGeneration(row);
     if (kwh !== null) canonical.push({ date: row.generation_date, kwh });
   }
@@ -685,10 +691,28 @@ function getRangeSummary({ from, to } = {}) {
   const worst = canonical.reduce((a, b) => (b.kwh < a.kwh ? b : a));
   const round2 = (v) => Number(Number(v).toFixed(2));
 
+  const expectedDays =
+    from && to
+      ? Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) +
+        1
+      : canonical.length;
+
+  const missingDays = [];
+  if (from && to && expectedDays > 0) {
+    const cursor = new Date(`${from}T00:00:00Z`);
+    for (let i = 0; i < expectedDays; i++) {
+      const key = cursor.toISOString().slice(0, 10);
+      if (!present.has(key)) missingDays.push(key);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+
   return {
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
     daysReported: canonical.length,
+    expectedDays,
+    missingDays,
     totalKwh: round2(total),
     dailyAverageKwh: round2(total / canonical.length),
     bestDay: { date: best.date, kwh: round2(best.kwh) },
@@ -737,6 +761,90 @@ function getLatestArchivedDate() {
   return row?.latest ?? null;
 }
 
+/**
+ * Canonical one-request dashboard summary for the Energy Summary cards' ARCHIVE
+ * source. Boundaries use Asia/Kolkata calendar days (IST) and values come from
+ * canonicalGeneration() - the same precedence the prediction model uses:
+ *
+ *   - today         - canonical generation for the IST day; null when the
+ *                     collector has not archived today yet (NEVER a stale
+ *                     yesterday value, never 0).
+ *   - month         - canonical sum from the month's 1st up to the LATEST
+ *                     ARCHIVED day in that month (completed days only; today
+ *                     is included the moment its own row exists). In-month
+ *                     gaps are never zero-filled.
+ *   - year          - canonical sum from the first archived day of the year
+ *                     (e.g. 2026-07-27) up to the latest archived day of the
+ *                     year, so a pre-first-generation gap (Jul 1-26) is NOT
+ *                     counted as zero generation.
+ *   - *Previous     - same-period canonical totals for trend comparison; null
+ *                     when that period has no archived coverage.
+ */
+function getArchiveSummary() {
+  const now = new Date();
+  const todayIst = istDateString(now);
+  const y = Number(todayIst.slice(0, 4));
+  const m = Number(todayIst.slice(5, 7));
+  const monthKey = todayIst.slice(0, 7);
+  const pad = (v) => String(v).padStart(2, "0");
+
+  const todayRow = statements().selectByDate.get(PLANT_ID(), todayIst);
+  const today = canonicalGeneration(todayRow) ?? null;
+
+  const yesterdayIst = istDateString(new Date(now.getTime() - 86400000));
+  const yesterdayRow = statements().selectByDate.get(PLANT_ID(), yesterdayIst);
+  const todayPrevious = canonicalGeneration(yesterdayRow) ?? null;
+
+  // This month: month 1st .. latest archived day in the current IST month.
+  const monthLastDay = new Date(y, m, 0).getDate();
+  const monthRows = statements().selectRange.all(
+    PLANT_ID(),
+    `${monthKey}-01`,
+    `${monthKey}-${pad(monthLastDay)}`,
+  );
+  const monthLatest = monthRows.length ? monthRows[monthRows.length - 1].generation_date : null;
+  const monthSummary = monthLatest
+    ? getRangeSummary({ from: `${monthKey}-01`, to: monthLatest })
+    : null;
+
+  // Previous calendar month (full month) for the trend comparison.
+  const prevM = m === 1 ? 12 : m - 1;
+  const prevY = m === 1 ? y - 1 : y;
+  const prevMonthKey = `${prevY}-${pad(prevM)}`;
+  const prevMonthLastDay = new Date(prevY, prevM, 0).getDate();
+  const prevMonthSummary = getRangeSummary({
+    from: `${prevMonthKey}-01`,
+    to: `${prevMonthKey}-${pad(prevMonthLastDay)}`,
+  });
+
+  // This year: first archived .. latest archived day in the current year.
+  const yearRows = statements().selectRange.all(PLANT_ID(), `${y}-01-01`, `${y}-12-31`);
+  const yearFirst = yearRows.length ? yearRows[0].generation_date : null;
+  const yearLatest = yearRows.length ? yearRows[yearRows.length - 1].generation_date : null;
+  const yearSummary =
+    yearFirst && yearLatest ? getRangeSummary({ from: yearFirst, to: yearLatest }) : null;
+
+  const prevYearSummary = getRangeSummary({ from: `${y - 1}-01-01`, to: `${y - 1}-12-31` });
+
+  return {
+    asOfDate: todayIst,
+    today,
+    todayPrevious,
+    month: monthSummary ? monthSummary.totalKwh : null,
+    monthPrevious: prevMonthSummary ? prevMonthSummary.totalKwh : null,
+    monthDays: monthSummary ? monthSummary.daysReported : 0,
+    monthExpectedDays: monthLatest ? Number(monthLatest.slice(8, 10)) : 0,
+    monthLatest,
+    year: yearSummary ? yearSummary.totalKwh : null,
+    yearPrevious: prevYearSummary ? prevYearSummary.totalKwh : null,
+    yearDays: yearSummary ? yearSummary.daysReported : 0,
+    yearFirst,
+    yearLatest,
+    firstDataDate: getCoverage().earliest,
+    latestDate: getLatestArchivedDate(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Timezone helper (single source of truth for IST calendar math)
 // ---------------------------------------------------------------------------
@@ -766,6 +874,7 @@ module.exports = {
   getLifetimeTotal,
   getCoverage,
   getLatestArchivedDate,
+  getArchiveSummary,
   istDateString,
   canonicalGeneration,
   upsertWeatherSnapshot,

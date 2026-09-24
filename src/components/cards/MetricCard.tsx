@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowDownRight, ArrowUpRight, Minus, type LucideIcon } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Minus, RefreshCw, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/primitives";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
@@ -32,16 +32,19 @@ export function MetricCard({
   footnote,
   loading,
   delay = 0,
+  source,
 }: {
   title: string;
   value: string | number;
-  unit?: string;
+  unit?: string | undefined;
   icon: LucideIcon;
   tone?: MetricTone;
   trend?: number | null;
-  footnote?: string;
+  footnote?: string | undefined;
   loading?: boolean;
   delay?: number;
+  /** Optional data source switcher shown as a chip on the footnote row. */
+  source?: { label: string; onToggle: () => void };
 }) {
   const numericValue = Number(value);
   const isNumeric = Number.isFinite(numericValue);
@@ -100,6 +103,21 @@ export function MetricCard({
       <div className="relative mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
         {typeof trend === "number" ? <Trend value={trend} /> : null}
         {footnote ? <span className="text-muted-foreground">{footnote}</span> : null}
+        {source ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              source.onToggle();
+            }}
+            title={`Showing ${source.label} data · tap to switch source`}
+            aria-label={`Data source: ${source.label}. Tap to switch.`}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-1.5 py-0.5 font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+          >
+            <RefreshCw className="size-3" aria-hidden />
+            {source.label}
+          </button>
+        ) : null}
       </div>
     </motion.article>
   );
