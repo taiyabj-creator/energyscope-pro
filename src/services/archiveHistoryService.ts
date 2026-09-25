@@ -136,6 +136,7 @@ export async function fetchArchiveTotal(): Promise<YearlyHistoryRow[]> {
 const EMPTY_SUMMARY: ArchiveEnergySummary = {
   asOfDate: "",
   today: null,
+  todayUpdatedAt: null,
   todayPrevious: null,
   month: null,
   monthPrevious: null,

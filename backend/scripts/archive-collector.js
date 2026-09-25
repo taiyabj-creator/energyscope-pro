@@ -14,7 +14,9 @@
  *                                                           -> manual backfill range (collect unconditionally)
  *
  * Scheduled-mode range determination:
- *   end   = previous completed Asia/Kolkata calendar day (never today)
+ *   end   = current Asia/Kolkata calendar day (today); today's row is a LIVE
+ *           rolling value that each hourly run refreshes to UTL's latest
+ *           scalar, so the archive never waits for the day to complete
  *   start = ARCHIVE_START_DATE when configured, otherwise the earliest day
  *           already present in solar_generation_daily.
  *

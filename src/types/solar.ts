@@ -33,6 +33,8 @@ export interface ArchiveEnergySummary {
   /** IST date string the summary was computed for, e.g. "2026-09-24". */
   asOfDate: string;
   today: number | null;
+  /** ms-since-epoch of the last write to today's rolling archive row; null = not archived yet. */
+  todayUpdatedAt: number | null;
   todayPrevious: number | null;
   month: number | null;
   monthPrevious: number | null;

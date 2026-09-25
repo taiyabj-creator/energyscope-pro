@@ -187,9 +187,11 @@ function DashboardPage() {
                   ? archive
                     ? "Today not archived yet"
                     : undefined
-                  : archive?.todayPrevious === null
-                    ? "No archived value for yesterday"
-                    : "vs yesterday"
+                  : archive?.todayUpdatedAt
+                    ? `Archive updated ${formatArchiveTime(archive.todayUpdatedAt)}`
+                    : archive?.todayPrevious === null
+                      ? "No archived value for yesterday"
+                      : "vs yesterday"
               }
               loading={!archive}
               source={{
@@ -469,6 +471,18 @@ function formatSampleTime(timeMinutes?: number): string {
   const minutes = total % 60;
   const hour12 = hours % 12 === 0 ? 12 : hours % 12;
   return `${hour12}:${String(minutes).padStart(2, "0")} ${hours >= 12 ? "PM" : "AM"}`;
+}
+
+const ARCHIVE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Kolkata",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+/** "10:00 AM" in Asia/Kolkata from a ms-since-epoch archive write timestamp. */
+function formatArchiveTime(ms: number): string {
+  return ARCHIVE_TIME_FORMATTER.format(new Date(ms));
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {

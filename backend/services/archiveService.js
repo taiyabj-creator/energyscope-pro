@@ -693,8 +693,7 @@ function getRangeSummary({ from, to } = {}) {
 
   const expectedDays =
     from && to
-      ? Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) +
-        1
+      ? Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1
       : canonical.length;
 
   const missingDays = [];
@@ -768,15 +767,19 @@ function getLatestArchivedDate() {
  *
  *   - today         - canonical generation for the IST day; null when the
  *                     collector has not archived today yet (NEVER a stale
- *                     yesterday value, never 0).
+ *                     yesterday value, never 0). Today's row is a LIVE
+ *                     rolling value refreshed by every hourly collector run;
+ *                     todayUpdatedAt exposes the last refresh time.
  *   - month         - canonical sum from the month's 1st up to the LATEST
- *                     ARCHIVED day in that month (completed days only; today
- *                     is included the moment its own row exists). In-month
- *                     gaps are never zero-filled.
+ *                     ARCHIVED day in that month. Once today's row exists it
+ *                     is THE latest day, so the current month's running total
+ *                     includes today's latest value immediately (no wait for
+ *                     month-end). In-month gaps are never zero-filled.
  *   - year          - canonical sum from the first archived day of the year
  *                     (e.g. 2026-07-27) up to the latest archived day of the
- *                     year, so a pre-first-generation gap (Jul 1-26) is NOT
- *                     counted as zero generation.
+ *                     year; today's rolling row is included when it exists and
+ *                     a pre-first-generation gap (Jul 1-26) is NOT counted as
+ *                     zero generation.
  *   - *Previous     - same-period canonical totals for trend comparison; null
  *                     when that period has no archived coverage.
  */
@@ -790,6 +793,9 @@ function getArchiveSummary() {
 
   const todayRow = statements().selectByDate.get(PLANT_ID(), todayIst);
   const today = canonicalGeneration(todayRow) ?? null;
+  // ms-since-epoch of the last time today's archive row was written (latest
+  // rolling UTL scalar). null when today has no archive row yet.
+  const todayUpdatedAt = todayRow?.updated_at ?? null;
 
   const yesterdayIst = istDateString(new Date(now.getTime() - 86400000));
   const yesterdayRow = statements().selectByDate.get(PLANT_ID(), yesterdayIst);
@@ -829,6 +835,7 @@ function getArchiveSummary() {
   return {
     asOfDate: todayIst,
     today,
+    todayUpdatedAt,
     todayPrevious,
     month: monthSummary ? monthSummary.totalKwh : null,
     monthPrevious: prevMonthSummary ? prevMonthSummary.totalKwh : null,

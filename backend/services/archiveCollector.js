@@ -459,8 +459,7 @@ async function collectDate(dateStr, deps = {}) {
     .getDailyRecords({ date: dateStr })
     .find((r) => String(r.plant_id) === String(plantId));
   if (isManualOverride(existingRow)) {
-    log(`${dateStr} manual_override day preserved (${
-      existingRow.generation_kwh} kWh); skipped.`);
+    log(`${dateStr} manual_override day preserved (${existingRow.generation_kwh} kWh); skipped.`);
     return { result: "unchanged", row: existingRow };
   }
 
@@ -814,8 +813,12 @@ function isArchivedRecordValid(row) {
 
 /**
  * Required archive window [start..end]:
- *   end   = previous completed Asia/Kolkata day (never today)
- *   start = ARCHIVE_START_DATE when configured, otherwise the earliest day
+ *   end   = current Asia/Kolkata calendar day (TODAY). Today's row is a
+ *           LIVE/rolling value: every hourly run refreshes it to UTL's latest
+ *           scalar, so the archive tracks the evolving solar day instead of
+ *           waiting for completion. A day with no data upstream simply stays
+ *           missing and is retried next run (never zero-filled).
+ *           start = ARCHIVE_START_DATE when configured, otherwise the earliest day
  *           already present in the archive (conservative default: the
  *           collector never backfills beyond existing coverage unless the
  *           operator explicitly widens the window).
@@ -837,16 +840,19 @@ function computeGapScanRange(deps = {}) {
   }
 
   const nowFn = typeof deps.now === "function" ? deps.now : undefined;
-  const end = previousCompletedIstDay(nowFn ? nowFn() : new Date());
+  const now = nowFn ? nowFn() : new Date();
+  const end = archiveService.istDateString(now);
 
   return { start, end };
 }
 
 /**
  * Scheduled-mode entry point. Walks EVERY calendar date in the required
- * range chronologically, verifies what already exists, collects only what is
- * missing or inconsistent, and leaves upstream-unavailable dates untouched so
- * the next run retries them. Idempotent: safe to run any number of times.
+ * range (ARCHIVE_START_DATE .. today) chronologically, verifies what already
+ * exists, collects what is missing or inconsistent, and refreshes today's
+ * normal UTL row so the archive tracks the latest value of the live solar day.
+ * Upstream-unavailable dates are left untouched so the next run retries them.
+ * Idempotent: safe to run any number of times.
  */
 async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {}) {
   const service = deps.archiveService || archiveService;
@@ -876,8 +882,9 @@ async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {
 
   const dates = enumerateDates(start, end);
 
-  // Repair historical rows against UTL's authoritative scalars FIRST so the
+  // Repair stored rows against UTL's authoritative scalars FIRST so the
   // expensive per-day verify/refetch below only sees genuinely broken days.
+  // The window now includes today, so a changed live scalar is reconciled too.
   let reconciliation = null;
   try {
     reconciliation = await reconcileCanonicalValues({ from: start, to: end }, deps);
@@ -898,8 +905,16 @@ async function runGapAwareCollection({ triggerType = "gap-scan" } = {}, deps = {
       missing.push(dateStr);
       log(`${dateStr} missing; collecting...`);
     } else if (isArchivedRecordValid(row)) {
-      alreadyValid++;
-      log(`${dateStr} already archived and verified; skipping.`);
+      if (dateStr === end && !isManualOverride(row)) {
+        // Today's normal UTL row is a rolling value: re-collect every run so
+        // the stored scalar follows the latest UTL value for the live solar
+        // day (3.31 -> 4.20 -> 5.15, replacing not accumulating).
+        stale.push(dateStr);
+        log(`${dateStr} is today and its UTL value is live; refreshing to latest.`);
+      } else {
+        alreadyValid++;
+        log(`${dateStr} already archived and verified; skipping.`);
+      }
     } else {
       stale.push(dateStr);
       log(`${dateStr} archived record inconsistent; refreshing...`);
