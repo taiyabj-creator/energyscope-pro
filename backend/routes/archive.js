@@ -1,12 +1,33 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 
 const router = express.Router();
 const archiveService = require("../services/archiveService");
+const masterPassword = require("../services/masterPasswordService");
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_YEAR = /^\d{4}$/;
 const MAX_RANGE_DAYS = 400;
+
+// Upper bound guarding against accidental/garbled manual values. The plant is
+// a 4.305 kWp array: a realistic peak day is ~30 kWh, so 100 kWh/day is an
+// extremely generous ceiling while still catching 999/typo-style mistakes.
+const MAX_MANUAL_KWH = 100;
+
+// Separate brute-force guard for the master-password endpoint: the dashboard
+// session is long-lived, so the manual-entry gate must not be open to
+// scripted password guessing.
+const manualLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many archive entry attempts. Please try again in 15 minutes.",
+  },
+});
 
 function isValidIsoDate(s) {
   if (!ISO_DATE.test(s || "")) return false;
@@ -144,6 +165,72 @@ router.get("/total", async (req, res) => {
     res.json({ success: true, data: row });
   } catch (err) {
     console.error("[ARCHIVE] total error:", err.message);
+    res.status(500).json({ success: false, message: "Archive unavailable." });
+  }
+});
+
+// Manual Dashboard Archive Entry. Writes one day's archived generation from
+// the dashboard, protected by the master password (scrypt hash in
+// ARCHIVE_MASTER_PASSWORD_HASH). The session token is already validated by
+// authMiddleware at the router mount; this adds the password as a second
+// factor for the privileged overwrite. manual_override rows are immutable to
+// the collector afterwards.
+router.post("/manual", manualLimiter, async (req, res) => {
+  try {
+    const { generationDate, generationKwh, masterPassword: attempt } = req.body ?? {};
+
+    if (typeof generationDate !== "string" || !isValidIsoDate(generationDate)) {
+      return badRequest(res, "generationDate must be a valid YYYY-MM-DD calendar date.");
+    }
+
+    if (generationDate > archiveService.istDateString(new Date())) {
+      return badRequest(res, "generationDate cannot be in the future.");
+    }
+
+    if (
+      typeof generationKwh !== "number" ||
+      !Number.isFinite(generationKwh) ||
+      generationKwh <= 0 ||
+      generationKwh > MAX_MANUAL_KWH
+    ) {
+      return badRequest(
+        res,
+        `generationKwh must be a finite number greater than 0 and at most ${MAX_MANUAL_KWH}.`,
+      );
+    }
+
+    // Generic message covers both missing and wrong attempts: no hint at what
+    // failed, in case the two are distinguishable by an attacker.
+    if (!masterPassword.verifyMasterPassword(attempt)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid archive master password.",
+      });
+    }
+
+    const outcome = archiveService.upsertManualOverride({ generationDate, generationKwh });
+
+    archiveService.logManualOverrideAudit({
+      generationDate,
+      previousKwh: outcome.previousCanonical,
+      newKwh: generationKwh,
+      actor: req.user && req.user.email ? req.user.email : "unknown",
+      ip: req.ip || null,
+      userAgent: req.get("user-agent") || null,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        generationDate,
+        generationKwh,
+        source: "manual_override",
+        result: outcome.result,
+        previousKwh: outcome.previousCanonical,
+      },
+    });
+  } catch (err) {
+    console.error("[ARCHIVE] manual error:", err.message);
     res.status(500).json({ success: false, message: "Archive unavailable." });
   }
 });

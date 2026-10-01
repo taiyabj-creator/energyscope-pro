@@ -84,6 +84,8 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 
       if (body && typeof body.error === "string") {
         errorCode = body.error;
+      } else if (body && typeof body.message === "string") {
+        errorCode = body.message;
       }
     } catch {
       // Response was not JSON — keep default code.

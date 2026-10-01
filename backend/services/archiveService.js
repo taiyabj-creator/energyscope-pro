@@ -178,6 +178,13 @@ function statements() {
         ON w.plant_id = g.plant_id AND w.snapshot_date = g.generation_date
       WHERE w.plant_id = ?
     `),
+    // Manual archive entry audit trail (never stores secrets or credentials).
+    manualLogInsert: db.prepare(`
+      INSERT INTO manual_archive_log
+        (plant_id, generation_date, action, previous_kwh, new_kwh, actor,
+         ip_address, user_agent, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
   };
 
   return stmts;
@@ -228,6 +235,61 @@ function upsertDailyGeneration(record) {
 
   const row = s.selectByDate.get(record.plantId, record.generationDate);
   return { result: existing ? "updated" : "inserted", row };
+}
+
+/**
+ * Manual Dashboard Archive Entry. Writes an operator-provided value as the
+ * canonical daily generation using the manual_override provenance:
+ * {
+ *   result: 'inserted' | 'updated' | 'unchanged',
+ *   previousCanonical: number | null,   // canonical kWh the day held before
+ *   row
+ * }
+ * manual_override rows are immutable to the collector (reconcileCanonicalValues
+ * and collectDate both skip them), so re-writing the same day converges to the
+ * latest operator value on the single (plant_id, generation_date) row.
+ */
+function upsertManualOverride({ generationDate, generationKwh }) {
+  const plantId = PLANT_ID();
+  const existing = statements().selectByDate.get(plantId, generationDate);
+  const previousCanonical = existing ? canonicalGeneration(existing) : null;
+
+  const outcome = upsertDailyGeneration({
+    plantId,
+    generationDate,
+    generationKwh,
+    rawGenerationValue: generationKwh,
+    rawUnit: "kWh_manual_override",
+    source: "manual_override",
+    pointsCount: 0,
+    checkMonthlyValue: generationKwh,
+    checkRatio: null,
+  });
+
+  return { ...outcome, previousCanonical };
+}
+
+/**
+ * Appends one manual archive entry to the audit trail. Never called with the
+ * master password or any session secret - only the outcome of the write.
+ */
+function logManualOverrideAudit({ generationDate, previousKwh, newKwh, actor, ip, userAgent }) {
+  // previousKwh may be null when the day had no prior row; never coerce null
+  // (Number(null) === 0) into a misleading "0" audit entry.
+  const previous =
+    previousKwh != null && Number.isFinite(Number(previousKwh)) ? Number(previousKwh) : null;
+
+  statements().manualLogInsert.run(
+    PLANT_ID(),
+    generationDate,
+    "manual_archive_override",
+    previous,
+    newKwh,
+    actor || "unknown",
+    ip || null,
+    userAgent || null,
+    Date.now(),
+  );
 }
 
 function storePowerCurve({ plantId, generationDate, pointsCount, payload }) {
@@ -871,6 +933,8 @@ function istDateString(instant) {
 module.exports = {
   PLANT_ID,
   upsertDailyGeneration,
+  upsertManualOverride,
+  logManualOverrideAudit,
   storePowerCurve,
   startRun,
   finishRun,

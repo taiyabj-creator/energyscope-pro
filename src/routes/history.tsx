@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, Printer, Search } from "lucide-react";
+import { Download, KeyRound, Printer, Search } from "lucide-react";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
+import { ManualArchiveEntryDialog } from "@/components/cards/ManualArchiveEntryDialog";
+import { Toaster } from "@/components/ui/sonner";
 import {
   useDailyHistory,
   useMonthlyHistory,
@@ -57,6 +59,10 @@ function HistoryPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  // Manual archive writes are an ARCHIVE-management action, so the trigger
+  // only exists in the "EnergyScope Archive" source of this page - never on
+  // the live dashboard and never while viewing UTL Live history.
+  const [manualEntryOpen, setManualEntryOpen] = useState(false);
 
   const isArchive = source === "archive";
   const utlDaily = useDailyHistory(selectedDate);
@@ -115,10 +121,19 @@ function HistoryPage() {
   return (
     <Panel>
       <PanelHeading
-        title="Generation history"
+        title={isArchive ? "Archive history" : "Generation history"}
         subtitle={SOURCE_SUBTITLES[source]}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            {isArchive && (
+              <button
+                type="button"
+                onClick={() => setManualEntryOpen(true)}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-solar/40 bg-solar/10 px-3 py-2 text-xs font-medium text-foreground hover:bg-solar/20"
+              >
+                <KeyRound className="size-3.5" /> Manual Archive Entry
+              </button>
+            )}
             <button
               type="button"
               onClick={exportRows}
@@ -352,6 +367,9 @@ function HistoryPage() {
           </div>
         </>
       )}
+
+      <ManualArchiveEntryDialog open={manualEntryOpen} onOpenChange={setManualEntryOpen} />
+      <Toaster position="top-center" />
     </Panel>
   );
 }

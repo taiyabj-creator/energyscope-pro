@@ -51,6 +51,7 @@ lerna-debug.log*
 *.db
 *.db-shm
 *.db-wal
+*.db.devseed.bak
 *.sqlite
 *.sqlite3
 *.sqlite-shm

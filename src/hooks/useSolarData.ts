@@ -112,6 +112,25 @@ export const useArchiveSummary = (enabled = true) =>
     staleTime: LIVE_REFRESH_INTERVAL_MS / 2,
   });
 
+// Manual Dashboard Archive Entry. On success refreshes every archive-backed
+// query so the summary cards and History page reflect the new value without a
+// hard reload.
+export const useManualArchiveEntry = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: archiveApi.submitManualArchiveEntry,
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["archive-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["archive-history-daily"] });
+      queryClient.invalidateQueries({ queryKey: ["archive-history-monthly"] });
+      queryClient.invalidateQueries({ queryKey: ["archive-history-yearly"] });
+      queryClient.invalidateQueries({ queryKey: ["archive-history-total"] });
+    },
+  });
+};
+
 export const useWeather = (latitude: number | undefined, longitude: number | undefined) =>
   useQuery({
     queryKey: ["weather", latitude, longitude],

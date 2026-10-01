@@ -105,6 +105,22 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_dws_plant_date
       ON daily_weather_snapshot(plant_id, snapshot_date);
+
+    CREATE TABLE IF NOT EXISTS manual_archive_log (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      plant_id        TEXT NOT NULL,
+      generation_date TEXT NOT NULL,
+      action          TEXT NOT NULL,
+      previous_kwh    REAL,
+      new_kwh         REAL NOT NULL,
+      actor           TEXT NOT NULL,
+      ip_address      TEXT,
+      user_agent      TEXT,
+      created_at      INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_mal_plant_date
+      ON manual_archive_log(plant_id, generation_date);
   `);
 
   // Migration: precipitation_sum_mm (observed mm) added after initial rollout,

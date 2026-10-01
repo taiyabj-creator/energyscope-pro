@@ -162,3 +162,35 @@ export async function fetchArchiveSummary(): Promise<ArchiveEnergySummary> {
   if (!data) return EMPTY_SUMMARY;
   return { ...EMPTY_SUMMARY, ...data };
 }
+
+// --- Manual archive entry ----------------------------------------------------
+
+export interface ManualArchiveEntryPayload {
+  generationDate: string;
+  generationKwh: number;
+  masterPassword: string;
+}
+
+export interface ManualArchiveEntryResult {
+  generationDate: string;
+  generationKwh: number;
+  source: string;
+  result: "inserted" | "updated" | "unchanged";
+  previousKwh: number | null;
+}
+
+/**
+ * Writes one day's archived generation from the dashboard, protected by the
+ * master password server-side. The password lives only in component state and
+ * is never persisted; both it and the session token leave the browser solely
+ * over the existing authenticated API channel.
+ */
+export async function submitManualArchiveEntry(
+  payload: ManualArchiveEntryPayload,
+): Promise<ManualArchiveEntryResult> {
+  const json = await apiRequest<{ success: boolean; data: ManualArchiveEntryResult }>(
+    "/api/archive/manual",
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+  return json.data;
+}
