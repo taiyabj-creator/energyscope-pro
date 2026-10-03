@@ -46,6 +46,60 @@ prediction (both call `predictForDate` with matching inputs); correction is base
 only on dates before the prediction target; config-driven plant lat/lon
 (`backend/config/plant.json`) is used for weather, never hardcoded.
 
+## Manual Archive Entry & Archive Overrides
+
+Implemented in commit `ab5631c` and deployed. Entry point is **History →
+EnergyScope Archive → Manual Archive Entry** (`src/routes/history.tsx`,
+`src/components/cards/ManualArchiveEntryDialog.tsx`). It is deliberately **not**
+on the homepage (`src/routes/index.tsx` must show no trigger).
+
+Flow: `POST /api/archive/manual` → `authMiddleware` → rate limiter (20 / 15 min)
+→ `masterPasswordService.verifyMasterPassword()` (scrypt + `timingSafeEqual`) →
+`archiveService.upsertManualOverride()` → `solar_generation_daily`
+(`source = 'manual_override'`) + `manual_archive_log`.
+
+Rules:
+
+- `manual_override` rows are **operator data**. Never casually overwrite or
+  delete them, and never "repair" one from a collected value.
+- The collector must preserve them: `archiveCollector.js` skips manual days in
+  both gap scans and reconciliation, and treats them as always valid. Keep that
+  behaviour if you touch the collector.
+- Audit data lives in `manual_archive_log` (actor, IP, user agent,
+  previous/new kWh, timestamp), separate from the archive row.
+- The production master password hash (`ARCHIVE_MASTER_PASSWORD_HASH`) is an
+  **environment secret**: never commit `.env`, never commit a real hash, never
+  put the password or hash in the frontend bundle, and never log either value.
+- The local dev password/hash is for local testing only. Never deploy it or reuse
+  it in production.
+- `backend/scripts/seed-dev-archive.js` is development-only tooling. Its rows
+  are **not** production data and must never be described as such.
+
+## Current-Day Generation
+
+"Today's generation" means generation for the **current Asia/Kolkata (IST)
+calendar day**. `src/utils/currentDayGeneration.ts` owns this decision.
+
+- Use IST calendar boundaries. Do **not** use UTC conversions such as
+  `toISOString().slice(0, 10)` to determine the plant's local day — for the first
+  5.5 hours of each IST day that yields the previous calendar day. Use
+  `istTodayKey()`.
+- UTL timestamps are naive IST wall-clock strings (`"2026-10-03 17:34:50"`). Read
+  the calendar date out of the string; do not re-interpret it as browser-local
+  time.
+- A dated reading counts as today only when its IST date equals the current IST
+  date. Otherwise display `0 kWh`.
+- When no usable date exists, fall back to current-day signals already
+  available (logger online, or a non-empty Day series for the day). Fail closed:
+  absence of proof means `0`, never blind trust in the scalar.
+- **Logger offline alone must not force today's generation to zero.** If valid
+  current-day generation was collected before the logger dropped out, that
+  generation stays on screen — the reading still carries today's date.
+- Do not add a network request to solve this; reuse the existing Day-series
+  query.
+- Leave the EnergyScope Archive card, the UTL/Archive flip-card mechanism, and
+  current-solar-power behaviour (0 W when offline) untouched.
+
 ## opencode-mem integration
 
 The repo uses the **opencode-mem** memory plugin, configured globally at
@@ -70,9 +124,10 @@ Oracle Cloud Infrastructure hosting, PM2 process management, nginx, HTTPS on a
 custom domain (domain/infrastructure details are private and must not appear in
 code or documentation).
 
-Current release: **v1.1.0** (commit `3d7c951 — Release v1.1.0`). The backend
-package version (`backend/package.json`) is maintained independently (currently
-`1.0.0`) — do not assume it matches the frontend release.
+Current release: **v1.2.0** (unreleased on `main`; the previous tag is v1.1.0 at
+commit `3d7c951 — Release v1.1.0`). The backend package version
+(`backend/package.json`) is maintained independently (currently `1.0.0`) — do not
+assume it matches the frontend release.
 
 ## Architecture
 
@@ -161,6 +216,27 @@ AI assistants must NOT:
 Production-critical files requiring explicit instruction before changes include
 PM2 configurations (e.g., `backend/ecosystem.archive.config.js`), nginx setup,
 and environment files.
+
+## Deployment Discipline
+
+- Never use destructive Git commands on the production checkout. No
+  `reset --hard`, `clean`, `checkout .`, `stash`, or force push. Production
+  fast-forward with `git merge --ff-only` only.
+- Back up the archive SQLite database (`sqlite3 .backup`) before any deploy that
+  changes archive schema or manual-entry behaviour. Keep existing backups.
+- Preserve unrelated production state: a modified `backend/data/maintenance.json`
+  and untracked `backend/data/archive.db.backup*` files are expected. Do not
+  delete, reset, or "clean up" files you did not create.
+- Stage files explicitly by path (`git add <file> ...`). Never `git add -A` /
+  `git add .` — unrelated dirty work must stay unstaged and uncommitted.
+- Restart only the PM2 processes that need it (`energyscope-backend`,
+  `energyscope-frontend`). Do not restart or re-register
+  `energyscope-archive-collector` unless explicitly asked; it is
+  `cron_restart`-scheduled and its runs collect production data.
+- Never deploy local `.env` files, local SQLite databases, or dev seed output to
+  production.
+- Build on the server from the committed tree (`npx tsc --noEmit` then
+  `npm run build`) rather than shipping a locally generated `.output/`.
 
 ## Change Discipline
 

@@ -4,7 +4,7 @@
 > Planned or future architecture is explicitly labelled **Planned** and must never be
 > described as if it already exists.
 >
-> Status: reflects the repository at release **v1.1.0** and later work on `main`.
+> Status: reflects the repository at release **v1.2.0** and later work on `main`.
 
 ---
 
@@ -77,7 +77,8 @@ src/
     src/hooks/        Shared React hooks (auth, alerts, solar data)
     src/context/      React context providers (dashboard auth, theme)
     src/types/        Shared TypeScript types
-    src/utils/        Formatting and helper utilities
+    src/utils/        Formatting, measurement-freshness, capacity and
+                      current-day-generation helper utilities
     src/lib/          Internal helpers
     src/start.ts      TanStack Start bootstrap (+ service worker registration)
 ```
@@ -93,6 +94,41 @@ The frontend must never contain:
 - UTL credentials or tokens
 - Direct calls to the UTL API
 - Business rules that belong to data ownership/aggregation
+
+### Current-day generation semantics
+
+"Today's generation" on the dashboard must mean generation for the **current
+Asia/Kolkata (IST) calendar day**, never a previously reported total. UTL's
+`daily_production` scalar carries no date of its own and keeps reporting whatever
+the logger last delivered, so it is validated before display
+(`src/utils/currentDayGeneration.ts`):
+
+- `readingIstDateKey(timestamp)` reads the calendar date out of the UTL reading's
+  own timestamp. UTL timestamps are **naive IST wall-clock** strings
+  (`"2026-10-03 17:34:50"`) with no UTC offset — verified against archived
+  power-curve samples, whose final sample matches the reported clock time. They
+  are therefore compared as IST dates and never re-interpreted as browser-local
+  time.
+- `istTodayKey()` produces the current IST calendar day
+  (`Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" })`).
+- `classifyCurrentDayGeneration({ readingTimestamp, loggerOnline, currentDaySampleCount })`
+  returns `current-day` or `stale`:
+  - a dated reading is current-day **only** when its IST date equals today's;
+  - with no usable date, current-day signals already on the page decide — a live
+    logger, or a non-empty Day series for the day;
+  - otherwise `stale`, and the card renders `0 kWh`. The logic **fails closed**:
+    absence of proof never means trust.
+- A logger outage later in the same day does **not** zero the value: the reading
+  keeps today's date, so generation collected before the outage stays visible.
+
+`useTodayDaySeries()` keys its shared query on the IST day. Deriving "today" with
+`toISOString().slice(0, 10)` returns the **UTC** date, which is the previous
+calendar day for the first 5.5 hours of every IST day; that would otherwise let
+yesterday's samples confirm "current-day data exists" and defeat the check.
+
+Unchanged by this design: the EnergyScope Archive card face, the UTL/Archive
+flip-card mechanism, and current-solar-power behaviour (0 W when the logger is
+offline).
 
 ---
 
@@ -134,7 +170,8 @@ backend/
         sessionService.js     encrypted session storage/retrieval
         authService.js        credential verification, session lifecycle
         archiveCollector.js   gap-aware daily archive collection
-        archiveService.js     archive queries/aggregates
+        archiveService.js     archive queries/aggregates, manual overrides
+        masterPasswordService.js scrypt verification for manual archive entry
         exportService.js      export data assembly
         exportGenerator.js    xlsx/pdf stream generation
         weatherService.js     Open-Meteo forecast client (server-side)
@@ -156,6 +193,12 @@ backend/
         notificationDatabase.js push-subscription SQLite module
         maintenance.json       maintenance records (JSON file storage)
     scripts/archive-collector.js standalone headless collector entry point
+    scripts/hash-master-password.js  generates an ARCHIVE_MASTER_PASSWORD_HASH
+    scripts/backfill-uv-history.js   one-off UTL history backfill helper
+    scripts/backfill-weather-history.js one-off weather snapshot backfill helper
+    scripts/seed-dev-archive.js      development-only archive seed helper
+                                      (never run in production; its rows are
+                                      not production data)
     ecosystem.archive.config.js PM2 configuration for the scheduled collector
     .env.example              environment variable template
 ```
@@ -190,6 +233,42 @@ Nitro (TanStack Start server)  ── routeRules proxy ──►  Express backen
   attaches the JWT bearer token, and normalizes endpoints to `/api/**`.
 - Live inverter/plant/chart data is always fetched live from UTL at request time.
 - Historical data is served from the backend's own SQLite archive.
+
+### Manual Archive Entry request flow
+
+Available only from **History → EnergyScope Archive**, never on the dashboard:
+
+```
+History → EnergyScope Archive → "Manual Archive Entry"
+        │
+        ▼
+POST /api/archive/manual
+        │
+        ▼
+authMiddleware                     valid JWT + live session row
+        │
+        ▼
+express-rate-limit limiter         20 attempts / 15 min per client
+        │
+        ▼
+masterPasswordService
+  .verifyMasterPassword(attempt)    scrypt + timingSafeEqual against
+                                    ARCHIVE_MASTER_PASSWORD_HASH
+        │
+        ▼
+archiveService.upsertManualOverride({ generationDate, generationKwh })
+        │
+        ├────────► solar_generation_daily   source = 'manual_override'
+        └────────► manual_archive_log       audit row (actor, IP, user agent,
+                                            previous/new kWh, timestamp)
+```
+
+- The plaintext master password is **never stored**; only the scrypt hash in the
+  backend environment is. The browser sends the password once per submission over
+  the authenticated same-origin request and never receives the hash.
+- `generationDate` must be an ISO day and cannot be in the future (IST).
+- On success the frontend invalidates the archive-backed queries so the summary
+  cards and History page reflect the new value without a hard reload.
 
 ---
 
@@ -380,6 +459,7 @@ for notifications):
 | `ARCHIVE_PLANT_ID` | Plant ID to archive |
 | `ARCHIVE_START_DATE` | Optional earliest day for archive backfill scans |
 | `ARCHIVE_DB_PATH` | Optional archive SQLite path override |
+| `ARCHIVE_MASTER_PASSWORD_HASH` | Scrypt hash that authorizes Manual Archive Entry (never the plaintext) |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push (VAPID) keys for notifications |
 | `NOTIFICATIONS_DB_PATH` | Optional push-subscription SQLite path override |
 | `NOTIFY_PLANT_NAME`, `NOTIFY_POLL_INTERVAL_MS`, `OFFLINE_CONFIRMATIONS` | Notification-monitor tuning |
@@ -399,6 +479,11 @@ metadata. Anything secret belongs in environment files only.
 - JWT + server-side session validation on every data route; sessions store UTL
   material encrypted at rest (`SESSION_ENCRYPTION_KEY`).
 - `helmet` security headers, restricted CORS, and login rate limiting.
+- Manual Archive Entry adds a second, independent factor: a master password
+  verified with scrypt in constant time, behind both `authMiddleware` and a
+  dedicated rate limiter (20 attempts / 15 min). Only the hash lives in the
+  backend environment; the plaintext is never persisted, logged, or returned to
+  the client.
 - Web Push subscriptions are scoped per authenticated account; unsubscribe is
   ownership-checked.
 - Never commit `.env` files, keys, tokens, passwords, or cookies. Never expose
@@ -415,7 +500,7 @@ Implemented storage (all local to the backend host):
 | Store | Module | Contents |
 | --- | --- | --- |
 | Sessions SQLite | `data/database.js` | User sessions incl. encrypted UTL tokens |
-| Archive SQLite | `data/archiveDatabase.js` | Daily production archive rows + aggregates |
+| Archive SQLite | `data/archiveDatabase.js` | Daily production archive rows + aggregates, `manual_archive_log` audit rows |
 | Notifications SQLite | `data/notificationDatabase.js` | Push subscriptions (per endpoint, idempotent upsert) and notification dedupe/state ledger |
 | Maintenance JSON | `data/maintenance.json` | Maintenance records (file-based storage) |
 
@@ -427,6 +512,10 @@ Rules:
   from the UTL API and never persisted.
 - The daily archive is the analytical backbone: history, analytics, predictions,
   and the daily summary notification read from it.
+- Operator-entered days (`source = 'manual_override'`) are authoritative: the
+  collector **never** overwrites or deletes them, both during gap scans and
+  during reconciliation passes. Audit information for those writes is kept in
+  the separate `manual_archive_log` table rather than inside the archive row.
 
 Planned:
 
@@ -444,7 +533,8 @@ All under `/api`, JSON over HTTPS. Data routes require `Authorization: Bearer`.
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, session status |
 | Plant | `GET /api/plant`, `GET /api/config` |
 | Live data | `GET /api/charts/daily|monthly|yearly|total`, `GET /api/inverter` |
-| Archive | `GET /api/archive/status|daily|monthly|yearly|total` |
+| Archive | `GET /api/archive/status|daily|monthly|yearly|total`, `GET /api/archive/summary` |
+| Archive (write) | `POST /api/archive/manual` — Manual Archive Entry; authenticated session **and** master password |
 | Exports | `GET /api/export/...` (Excel/PDF/ZIP streams) |
 | Prediction | `GET /api/prediction/...` (next-day energy, performance score) |
 | Maintenance | CRUD under `/api/maintenance` |
@@ -482,10 +572,11 @@ Contract rules:
   fit (`feat:`, `fix:`, `docs:`, `refactor:`), matching existing history.
 - Verify before pushing: `npm run lint`, `npx tsc --noEmit`, `npm run build`
   (and a backend smoke start for backend changes).
-- Releases are tagged GitHub releases (current: v1.1.0 at commit `3d7c951`).
-  Note: the backend package version (`backend/package.json`) is maintained
-  independently and is currently `1.0.0`; do not assume it matches the frontend
-  release tag.
+- Releases are tagged GitHub releases. The application version is tracked in
+  `package.json` (mirrored in `package-lock.json`, `GET /api/health`, and the
+  diagnostics page); the previous tag was v1.1.0 at commit `3d7c951`. Note: the
+  backend package version (`backend/package.json`) is maintained independently
+  and is currently `1.0.0`; do not assume it matches the frontend release tag.
 
 ---
 

@@ -1,7 +1,8 @@
 # EnergyScope Development Roadmap
 
 > Status: Active Development
-> Current release: **v1.1.0** (commit `3d7c951 — Release v1.1.0`)
+> Current release: **v1.2.0** (unreleased on `main`; previous tag v1.1.0 at
+> commit `3d7c951 — Release v1.1.0`)
 >
 > This roadmap reflects the CURRENT state of the repository. Items are labelled
 > Completed / In Progress / Planned / Future. Speculative ideas live under
@@ -11,10 +12,57 @@
 
 ## Current Release
 
+**v1.2.0** — EnergyScope Pro is a deployed, production PWA for monitoring UTL
+Solar inverters.
+
+### Added
+
+- **Manual Archive Entry**, available from **History → EnergyScope Archive** (it
+  is intentionally not on the homepage). An operator can enter or correct a
+  single archived day; the write requires an authenticated session *and* a
+  separate master password verified with scrypt, and is rate limited to 20
+  attempts per 15 minutes.
+- **Manual archive audit logging.** Every manual write records actor, IP, user
+  agent, previous/new kWh, and timestamp in a dedicated `manual_archive_log`
+  table, separate from the archive row itself.
+- `ARCHIVE_MASTER_PASSWORD_HASH` backend environment variable, plus
+  `backend/scripts/hash-master-password.js` to generate a hash locally and
+  `backend/scripts/seed-dev-archive.js` as a development-only archive seed
+  helper (never production data).
+
+### Fixed
+
+- **Stale previous-day generation is no longer shown as today's generation.**
+  UTL's `daily_production` scalar carries no date and keeps reporting the last
+  value the logger delivered, so after an outage the previous day's total could
+  appear as today's yield. A reading is now displayed only when it is dated the
+  current Asia/Kolkata calendar day, or when existing current-day signals prove
+  it; otherwise the card reads `0 kWh`.
+- **Current-day series selection now uses the Asia/Kolkata calendar day.**
+  `useTodayDaySeries()` previously derived "today" from the browser's UTC date,
+  which is the previous calendar day for the first 5.5 hours of every IST day.
+
+### Preserved
+
+- Automatic collection never overwrites or deletes operator-entered
+  `manual_override` days, in either gap scans or reconciliation passes.
+- The UTL Data / EnergyScope Archive flip-card behaviour, including the
+  independent Archive source on the History page.
+- Current solar power behaviour (0 W while the logger is offline).
+- Historical AI / prediction behaviour and all existing API contracts.
+
+Production deployment note: the Manual Archive Entry feature is deployed in
+commit `ab5631c`; the current-day generation fix is not yet committed or
+deployed.
+
+---
+
+## Previous Release
+
 **v1.1.0** — EnergyScope Pro is a deployed, production PWA for monitoring UTL
 Solar inverters.
 
-Current production state:
+Production state at v1.1.0:
 
 - Hosted on Oracle Cloud Infrastructure (OCI) with PM2 process management
 - Served over HTTPS on a custom domain behind an nginx reverse proxy

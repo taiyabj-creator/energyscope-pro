@@ -13,6 +13,16 @@ The goal of the project is to build a faster, cleaner, and more feature-rich alt
 - Live inverter monitoring (plant, devices, logger diagnostics)
 - Live generation charts (daily / monthly / yearly / total)
 - Historical production data with automatic daily archival
+- Two data sources on the dashboard and History pages: **UTL Data** (live from
+  UTL) and **EnergyScope Archive** (the application's own archive), switchable
+  per card / per page
+- Manual Archive Entry: an operator can correct or backfill a single archived
+  day from **History → EnergyScope Archive**. The entry is protected by an
+  additional master password, is recorded in an audit log, and is never
+  overwritten by automatic collection
+- Today's generation is always scoped to the current Asia/Kolkata calendar day,
+  so a previous day's total is never shown as today's yield while the logger is
+  offline
 - Weather dashboard
 - Smart daily energy prediction (weather-based base, corrected by historical
   similarity/recency-weighted residuals) with per-day observed weather history
@@ -105,7 +115,10 @@ backend/
     controllers/      Request controllers
     config/           Plant configuration
     data/             SQLite databases and database modules (gitignored)
-    scripts/          Standalone scripts (daily archive collector)
+    scripts/          Standalone scripts: scheduled archive collector, UTL and
+                      weather history backfill helpers, master-password hash
+                      helper, and a development-only archive seed helper (never
+                      used in production)
     .env.example      Environment variable template
 
 public/
@@ -123,7 +136,7 @@ AGENTS.md              AI coding assistant guidelines
 
 # Development Status
 
-Current release: **v1.1.0** (active development).
+Current release: **v1.2.0** (active development).
 
 The project has moved beyond the prototype stage: the dashboard, live monitoring, historical archiving, exports, maintenance, and weather features are implemented and deployed. See `PROJECT_ROADMAP.md` for the detailed roadmap.
 
@@ -235,6 +248,14 @@ Backend (`backend/.env`, see `backend/.env.example`):
 | `UTL_COLLECTOR_PASSWORD` | Password for the archive collector account |
 | `ARCHIVE_PLANT_ID` | Plant ID to archive |
 | `ARCHIVE_DB_PATH` | Optional override of the SQLite archive file location |
+| `ARCHIVE_MASTER_PASSWORD_HASH` | Scrypt hash authorizing **Manual Archive Entry** (History → EnergyScope Archive). Store the hash only; the plaintext password is never stored |
+
+Generate the hash locally with the helper script and discard the plaintext:
+
+```bash
+cd backend
+node scripts/hash-master-password.js "<your master password>"
+```
 
 **Warning:** never commit `.env` files, tokens, passwords, or API keys. `.env` files are gitignored by design; keep it that way. Store secrets only in environment files or your hosting provider's secret management.
 
@@ -299,6 +320,6 @@ This project is under active development. A license will be selected before wide
 
 # Version
 
-Current version: **v1.1.0**
+Current version: **v1.2.0**
 
 Status: actively developed.

@@ -263,8 +263,9 @@ export async function fetchLogger(): Promise<LoggerInfo> {
 export async function fetchEnergySeries(
   range: EnergyRange,
   selectedDate: Date,
+  dayOverride?: string,
 ): Promise<SeriesPoint[]> {
-  const day = selectedDate.toISOString().slice(0, 10);
+  const day = dayOverride ?? selectedDate.toISOString().slice(0, 10);
 
   const month =
     selectedDate.getFullYear() + "-" + String(selectedDate.getMonth() + 1).padStart(2, "0");

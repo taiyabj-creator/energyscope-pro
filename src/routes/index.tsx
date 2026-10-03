@@ -20,6 +20,7 @@ import {
 } from "@/hooks/useSolarData";
 import { selectLatestDaySample } from "@/services/solarService";
 import { useAlerts } from "@/hooks/useAlerts";
+import { classifyCurrentDayGeneration } from "@/utils/currentDayGeneration";
 import {
   formatDate,
   formatEnergy,
@@ -83,6 +84,21 @@ function DashboardPage() {
   const solar = formatPower(currentPowerWatts);
   const capacityPercentage = getCapacityPercentage(currentPowerWatts, plant?.capacityKw);
   const freshness = formatMeasurementFreshness(live?.timestamp);
+
+  // Today's UTL generation is only today's when the reading itself is dated
+  // today (IST), or when the day already has samples / logger contact. A logger
+  // that drops out keeps reporting its last value — usually the *previous*
+  // day's completed total — which must read as 0 rather than as today's yield.
+  // Generation already collected earlier today stays on screen when the logger
+  // goes offline later the same day, because that reading keeps today's date.
+  const todayUtlIsCurrentDay =
+    classifyCurrentDayGeneration({
+      readingTimestamp: live?.timestamp,
+      loggerOnline,
+      currentDaySampleCount: todaySeries?.length ?? 0,
+    }) === "current-day";
+  const todayUtlGeneration = todayUtlIsCurrentDay ? (totals?.today ?? 0) : 0;
+
   if (isLoading && !live && !totals && !plant && !inverter) {
     return <DashboardSkeleton />;
   }
@@ -147,15 +163,19 @@ function DashboardPage() {
           front={
             <MetricCard
               title="Today's generation"
-              value={formatEnergy(totals?.today ?? 0).value}
+              value={formatEnergy(todayUtlGeneration).value}
               unit="kWh"
               icon={Sunrise}
               tone="solar"
-              trend={totals ? trendPct(totals.today, totals.todayPrevious) : null}
+              trend={
+                todayUtlIsCurrentDay && totals ? trendPct(totals.today, totals.todayPrevious) : null
+              }
               footnote={
-                totals && totals.todayPrevious === null
-                  ? "No comparison data for yesterday"
-                  : "vs yesterday"
+                !todayUtlIsCurrentDay
+                  ? "Logger offline · today's readings unavailable"
+                  : totals && totals.todayPrevious === null
+                    ? "No comparison data for yesterday"
+                    : "vs yesterday"
               }
               source={{
                 label: "UTL Data",
