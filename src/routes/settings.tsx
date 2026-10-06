@@ -18,6 +18,9 @@ import {
   type EnableResult,
 } from "@/services/pushService";
 import { resolvePushUiState } from "@/services/pushUiState";
+import { ProductionExportDialog } from "@/components/cards/ProductionExportDialog";
+import { Toaster } from "@/components/ui/sonner";
+import type { ExportFormat } from "@/services/exportService";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -48,11 +51,33 @@ function enableFailureMessage(result: Exclude<EnableResult, { ok: true }>): stri
   return PERMISSION_LABELS[result.reason] ?? result.detail ?? "Notifications could not be enabled.";
 }
 
+/**
+ * Each button opens the shared export dialog with its format pre-selected, so the
+ * format is one click away while the user still gets the period confirmation -
+ * and can switch format - before anything is generated.
+ */
+const EXPORT_BUTTONS: { format: ExportFormat; title: string; description: string }[] = [
+  { format: "csv", title: "Export CSV", description: "Production history as a CSV spreadsheet." },
+  {
+    format: "xlsx",
+    title: "Export Excel (.xlsx)",
+    description: "Formatted production data for Microsoft Excel.",
+  },
+  {
+    format: "pdf",
+    title: "Export PDF report",
+    description: "A clean, printable production history report.",
+  },
+];
+
 function SettingsPage() {
   const { theme, toggle } = useTheme();
   const { data: plant } = usePlantInfo();
   const { logout } = useDashboardAuth();
   const navigate = useNavigate();
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
 
   const [notificationPermission, setNotificationPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "default",
@@ -65,6 +90,11 @@ function SettingsPage() {
     subscribedOnServer: number | null;
     hasLocalSubscription: boolean;
   }>({ subscribedOnServer: null, hasLocalSubscription: false });
+
+  const openExport = (format: ExportFormat) => {
+    setExportFormat(format);
+    setExportOpen(true);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -285,36 +315,28 @@ function SettingsPage() {
       <Panel delay={0.1}>
         <PanelHeading
           title="Exports & reports"
-          subtitle="History exports use the values returned by UTL"
+          subtitle="Choose a particular date, range, month or year — exports use the values returned by UTL"
         />
         <div className="grid gap-3">
-          <button
-            type="button"
-            onClick={() => window.open("/api/export/csv", "_blank")}
-            className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40"
-          >
-            <div className="text-left">
-              <p className="text-sm font-medium">Export CSV</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Export production history as a CSV spreadsheet.
-              </p>
-            </div>
-            <Download className="size-5 text-solar" />
-          </button>
+          <p className="text-xs text-muted-foreground">
+            Exports are authenticated requests, so they work even when the dashboard is served from
+            a different host than the API.
+          </p>
 
-          <button
-            type="button"
-            onClick={() => window.open("/api/export/excel", "_blank")}
-            className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40"
-          >
-            <div className="text-left">
-              <p className="text-sm font-medium">Export Excel (.xlsx)</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Export formatted production data for Microsoft Excel.
-              </p>
-            </div>
-            <Download className="size-5 text-solar" />
-          </button>
+          {EXPORT_BUTTONS.map(({ format, title, description }) => (
+            <button
+              key={format}
+              type="button"
+              onClick={() => openExport(format)}
+              className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40"
+            >
+              <div>
+                <p className="text-sm font-medium">{title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+              </div>
+              <Download className="size-5 text-solar" />
+            </button>
+          ))}
         </div>
       </Panel>
 
@@ -353,6 +375,14 @@ function SettingsPage() {
           Logout
         </button>
       </Panel>
+
+      <ProductionExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        initialFormat={exportFormat}
+      />
+
+      <Toaster position="top-center" />
     </div>
   );
 }

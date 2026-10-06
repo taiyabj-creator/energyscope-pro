@@ -53,12 +53,20 @@ export function toCsv(rows: Record<string, string | number>[]) {
   );
 }
 
-export function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
-  const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8;" });
+/**
+ * Single download path for the app: hand a Blob to an object URL, click a
+ * temporary anchor, then release the URL. Used by the client-side CSV helper
+ * and by the server-generated export downloads alike.
+ */
+export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
+  downloadBlob(filename, new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8;" }));
 }
