@@ -781,6 +781,43 @@ function getRangeSummary({ from, to } = {}) {
   };
 }
 
+/**
+ * Exact per-date archive rows for an inclusive range, each carrying the
+ * canonical generation value plus the provenance a caller needs to answer a
+ * specific-date question honestly.
+ *
+ * The kWh value is canonicalGeneration() - the SAME single source of truth the
+ * prediction correction model and getRangeSummary() use. This is never a second,
+ * competing calculation, and never the raw generation_kwh column.
+ *
+ * Rows are returned for every date that EXISTS in the archive, in ascending
+ * date order. kwh is null only for a row that physically exists but whose
+ * canonical value cannot be resolved (all fallbacks absent) - that is
+ * deliberately distinct from the date having no row at all, so callers can
+ * tell "unusable row" apart from "no record". Callers must only report a date
+ * as missing when this function's result proves the row is absent; absence of a
+ * date from a caller's own context is not evidence of archive absence.
+ *
+ * @param {{from?: string, to?: string}} bounds inclusive 'YYYY-MM-DD' range.
+ * @returns {Array<{date: string, kwh: number|null, source: string|null,
+ *   isManualOverride: boolean}>} ascending by date; empty when nothing matched.
+ */
+function getDailyRows({ from, to } = {}) {
+  const s = statements();
+  const pid = PLANT_ID();
+  const rows = from && to ? s.selectRange.all(pid, from, to) : s.selectAllForPlant.all(pid);
+
+  return rows.map((row) => {
+    const kwh = canonicalGeneration(row);
+    return {
+      date: row.generation_date,
+      kwh: kwh === null ? null : Number(Number(kwh).toFixed(2)),
+      source: row.source ?? null,
+      isManualOverride: String(row.source) === "manual_override",
+    };
+  });
+}
+
 function getMonthlyTotal(month) {
   return statements().selectMonthly.get(PLANT_ID(), month) || null;
 }
@@ -940,6 +977,7 @@ module.exports = {
   finishRun,
   getDailyRecords,
   getRangeSummary,
+  getDailyRows,
   getMonthlyTotal,
   getYearlyTotal,
   getLifetimeTotal,
