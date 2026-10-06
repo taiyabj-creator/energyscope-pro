@@ -89,7 +89,11 @@ function DevicesPage() {
             </div>
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
-            <Item label="Firmware" value={inverter?.firmware ?? "—"} />
+            {inverter?.firmware &&
+            inverter.firmware.trim() &&
+            inverter.firmware.trim().toLowerCase() !== "unknown" ? (
+              <Item label="Firmware" value={inverter.firmware} />
+            ) : null}
             <Item
               label="Daily generation"
               value={
@@ -137,7 +141,11 @@ function DevicesPage() {
             </div>
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
-            <Item label="Firmware" value={logger?.firmware ?? "—"} />
+            {logger?.firmware &&
+            logger.firmware.trim() &&
+            logger.firmware.trim().toLowerCase() !== "unknown" ? (
+              <Item label="Firmware" value={logger.firmware} />
+            ) : null}
             <Item label="WiFi network" value={logger?.wifiSsid ?? "—"} icon={Wifi} />
             <Item
               label="Signal (RSSI)"
@@ -163,6 +171,18 @@ function DevicesPage() {
 }
 
 function Item({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof Wifi }) {
+  const v = (value ?? "").toString().trim();
+  const isUnavailable =
+    v.length === 0 ||
+    v === "-" ||
+    v === "—" ||
+    v === "?" ||
+    v.toLowerCase() === "unknown" ||
+    v.toLowerCase() === "not available" ||
+    v.toLowerCase() === "n/a" ||
+    v.toLowerCase() === "no data";
+
+  if (isUnavailable) return null;
   return (
     <div className="min-w-0">
       <dt className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">

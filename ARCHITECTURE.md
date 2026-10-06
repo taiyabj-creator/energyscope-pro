@@ -72,6 +72,7 @@ src/
     src/services/     Client-side services:
                         solarService.ts          solar/weather data access
                         archiveHistoryService.ts historical archive reads
+                        exportService.ts         export scope/format contract
                         pushService.ts           web push subscription logic
                         pushUiState.ts           pure permission->UI state mapping
     src/hooks/        Shared React hooks (auth, alerts, solar data)
@@ -157,7 +158,7 @@ backend/
         archive.js            historical production archive
         charts.js             live generation charts (daily/monthly/yearly/total)
         config.js             public plant/app configuration
-        export.js             Excel/PDF/ZIP exports
+        export.js             scoped production-history exports (CSV/XLSX/PDF)
         health.js             unauthenticated health endpoint
         inverter.js           live inverter/device data
         maintenance.js        maintenance history CRUD
@@ -172,8 +173,9 @@ backend/
         archiveCollector.js   gap-aware daily archive collection
         archiveService.js     archive queries/aggregates, manual overrides
         masterPasswordService.js scrypt verification for manual archive entry
-        exportService.js      export data assembly
-        exportGenerator.js    xlsx/pdf stream generation
+exportService.js      export data assembly (UTL chart reads)
+exportScope.js        pure export scope resolution/validation + IST labels
+exportGenerator.js    csv/xlsx/pdf generation for a scoped period
         weatherService.js     Open-Meteo forecast client (server-side)
         predictionService.js  next-day energy prediction
         performanceScore.js   performance score computation
@@ -269,6 +271,49 @@ archiveService.upsertManualOverride({ generationDate, generationKwh })
 - `generationDate` must be an ISO day and cannot be in the future (IST).
 - On success the frontend invalidates the archive-backed queries so the summary
   cards and History page reflect the new value without a hard reload.
+
+### Production data export flow
+
+Settings and Generation History share one dialog
+(`src/components/cards/ProductionExportDialog.tsx`) and one request contract
+(`src/services/exportService.ts`):
+
+```
+Settings "Export CSV / Excel / PDF"  ─┐
+History "Export" (UTL source)        ─┴─► scope step: date | range | month | year
+                                            │
+                                            ▼ confirm step: period, day count,
+                                              "No record" note, format choice
+                                            │
+                                            ▼
+                              GET /api/export?format=&scope=…
+                                    │        (Authorization: Bearer …,
+                                    │         x-device-id — built by
+                                    │         src/api/client.ts apiBlob)
+                                    ▼
+authMiddleware → export.js → exportScope.resolveExportScope()
+                              → exportService.getProductionHistory()
+                              → exportGenerator (csv | xlsx | pdf)
+```
+
+- **Authentication is unchanged.** Exports go through the app's own API client, so
+  they carry the same bearer token as every other request. A direct browser
+  navigation (`window.open("/api/export/...")`) cannot send that header and is
+  rejected with 401 — the browser must not fall back to a weaker path.
+- The values exported are **exactly the values UTL returns**, read from the same
+  `monthly` chart endpoint the History page's Daily tab uses, so an export can
+  never disagree with the on-screen history.
+- A range is served by fetching each calendar month it touches exactly once.
+- A day UTL returns no record for is exported as an **empty** energy cell labelled
+  `No record`, never as `0`. A recorded 0 kWh day is written as `0` and labelled
+  `Recorded (0 kWh)`. Totals count recorded days only.
+- Dates cross the wire as plain `YYYY-MM-DD` / `YYYY-MM` strings and are resolved
+  against the plant's `Asia/Kolkata` calendar; no UTC conversion is applied to a
+  user-selected day.
+- `GET /api/export/csv` and `GET /api/export/excel` remain as thin aliases that
+  delegate to the same handler, defaulting to the current calendar month.
+- Archive-source history keeps its existing in-memory client-side CSV export: the
+  server export is UTL production data and must not silently become archive data.
 
 ---
 
@@ -535,7 +580,7 @@ All under `/api`, JSON over HTTPS. Data routes require `Authorization: Bearer`.
 | Live data | `GET /api/charts/daily|monthly|yearly|total`, `GET /api/inverter` |
 | Archive | `GET /api/archive/status|daily|monthly|yearly|total`, `GET /api/archive/summary` |
 | Archive (write) | `POST /api/archive/manual` — Manual Archive Entry; authenticated session **and** master password |
-| Exports | `GET /api/export/...` (Excel/PDF/ZIP streams) |
+| Exports | `GET /api/export?format=csv\|xlsx\|pdf&scope=date\|range\|month\|year` — authenticated production history from UTL |
 | Prediction | `GET /api/prediction/...` (next-day energy, performance score) |
 | Maintenance | CRUD under `/api/maintenance` |
 | Notifications | `GET /api/notifications/status`, `GET /api/notifications/vapid-public`, `POST /api/notifications/subscribe`, `POST /api/notifications/unsubscribe` |

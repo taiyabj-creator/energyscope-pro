@@ -80,9 +80,14 @@ export interface InverterInfo {
   firmware: string;
   status: ConnectionStatus;
   acVoltage: number;
+  acCurrent?: number;
   acFrequency: number;
+  acPower?: number;
   dcVoltage: number;
   dcCurrent: number;
+  dcPower?: number;
+  powerFactor?: number | null;
+  efficiency?: number | null;
   temperatureC: number;
 }
 

@@ -30,19 +30,7 @@ export function useAlerts() {
     });
   }
 
-  if (totals.data && totals.data.today > 0) {
-    const dayOfMonth = new Date().getDate();
-    const dailyAverage = dayOfMonth > 0 ? totals.data.month / dayOfMonth : 0;
-
-    if (dailyAverage > 0 && totals.data.today < dailyAverage * 0.4) {
-      alerts.push({
-        id: "low-generation",
-        severity: "warning",
-        title: "Low Generation",
-        description: "Today's production is significantly below average.",
-      });
-    }
-  }
+  // Low generation alert removed - misleading during early day hours as production ramps up
 
   return {
     alerts,

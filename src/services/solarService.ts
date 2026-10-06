@@ -221,8 +221,18 @@ export async function fetchInverter(): Promise<InverterInfo> {
 
   const loggerOffline = getLoggerStatus(inv) !== "online";
 
-  const dcPower = loggerOffline ? 0 : Number(inv.dc_power_1);
-  const acPower = loggerOffline ? 0 : Number(inv.total_ac_power);
+  const dcPowerRaw = loggerOffline ? 0 : Number(inv.dc_power_1);
+  const acPowerRaw = loggerOffline ? 0 : Number(inv.total_ac_power);
+  const dcPower = Number.isFinite(dcPowerRaw) ? dcPowerRaw : 0;
+  const acPower = Number.isFinite(acPowerRaw) ? acPowerRaw : 0;
+
+  let efficiency: number | null = null;
+  if (!loggerOffline && dcPower > 0 && acPower >= 0) {
+    const eff = (acPower / dcPower) * 100;
+    if (Number.isFinite(eff) && eff >= 0 && eff <= 100) {
+      efficiency = Math.round(eff * 10) / 10;
+    }
+  }
 
   return {
     model: inv.inverter_type_description,
@@ -234,9 +244,13 @@ export async function fetchInverter(): Promise<InverterInfo> {
 
     acVoltage: loggerOffline ? 0 : Number(inv.ac_voltage_a),
     acFrequency: loggerOffline ? 0 : Number(inv.ac_output_frequency),
+    acPower: loggerOffline ? 0 : acPower,
 
     dcVoltage: loggerOffline ? 0 : Number(inv.dc_voltage_1),
     dcCurrent: loggerOffline ? 0 : Number(inv.dc_current_1),
+    dcPower: loggerOffline ? 0 : dcPower,
+
+    efficiency,
 
     temperatureC: Number(inv.temperature_1),
   };

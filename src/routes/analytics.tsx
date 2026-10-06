@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
-import { useAnalyticsData } from "@/hooks/useSolarData";
+import { useAnalyticsData, useInverter } from "@/hooks/useSolarData";
 import { formatDate } from "@/utils/format";
 
 export const Route = createFileRoute("/analytics")({
@@ -22,6 +22,7 @@ export const Route = createFileRoute("/analytics")({
 function AnalyticsPage() {
   const year = new Date().getFullYear();
   const { data } = useAnalyticsData(year);
+  const { data: inverter } = useInverter();
   const summary = data?.summary;
   const heatmap = data?.heatmap ?? [];
   const max = Math.max(1, ...heatmap.map((cell) => cell.value));
@@ -31,7 +32,7 @@ function AnalyticsPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Average daily yield"
-          value={summary ? summary.averageDaily.toFixed(2) : "—"}
+          value={summary ? summary.averageDaily.toFixed(2) : "�?"}
           unit="kWh"
           icon={LineChartIcon}
           tone="solar"
@@ -39,14 +40,14 @@ function AnalyticsPage() {
         />
         <MetricCard
           title="Specific yield"
-          value={summary ? summary.specificYield.toFixed(2) : "—"}
+          value={summary ? summary.specificYield.toFixed(2) : "�?"}
           unit="kWh/kWp"
           icon={Gauge}
           footnote="Year-to-date production / installed capacity"
         />
         <MetricCard
           title="Best production day"
-          value={summary ? summary.bestDay.generation.toFixed(2) : "—"}
+          value={summary ? summary.bestDay.generation.toFixed(2) : "�?"}
           unit="kWh"
           icon={Award}
           tone="battery"
@@ -54,11 +55,32 @@ function AnalyticsPage() {
         />
         <MetricCard
           title="Worst production day"
-          value={summary ? summary.worstDay.generation.toFixed(2) : "—"}
+          value={summary ? summary.worstDay.generation.toFixed(2) : "�?"}
           unit="kWh"
           icon={CalendarX}
           tone="neutral"
           footnote={summary ? displayDate(summary.worstDay.date) : "Not available"}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Inverter efficiency"
+          value={
+            inverter?.efficiency !== null && inverter?.efficiency !== undefined
+              ? `${inverter.efficiency.toFixed(1)}`
+              : "Not available"
+          }
+          unit={
+            inverter?.efficiency !== null && inverter?.efficiency !== undefined ? "%" : undefined
+          }
+          icon={Gauge}
+          tone="solar"
+          footnote={
+            inverter?.efficiency !== null && inverter?.efficiency !== undefined
+              ? `DC ${inverter.dcPower?.toFixed(2) ?? "--"} kW → AC ${inverter.acPower?.toFixed(2) ?? "--"} kW · Live (instantaneous)`
+              : "Live efficiency unavailable (offline/zero DC/invalid readings)"
+          }
         />
       </div>
 
@@ -179,11 +201,6 @@ function AnalyticsPage() {
                   ? "Not available"
                   : `${data.currentMonthAverage.toFixed(2)} kWh`
               }
-            />
-            <Insight
-              title="Performance ratio"
-              value="Not available"
-              detail="Irradiance data is not provided by the UTL production endpoints."
             />
           </div>
         </Panel>

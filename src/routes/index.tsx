@@ -462,7 +462,11 @@ function DashboardPage() {
             <Stat label="DC voltage" value={`${inverter?.dcVoltage.toFixed(1) ?? "—"} V`} />
             <Stat label="DC current" value={`${inverter?.dcCurrent.toFixed(1) ?? "—"} A`} />
 
-            <Stat label="Firmware" value={inverter?.firmware ?? "—"} />
+            {inverter?.firmware &&
+            inverter.firmware.trim() &&
+            inverter.firmware.trim().toLowerCase() !== "unknown" ? (
+              <Stat label="Firmware" value={inverter.firmware} />
+            ) : null}
             <Stat label="Serial" value={inverter?.serial ?? "—"} />
           </div>
           <p className="mt-5 inline-flex items-center gap-2 text-xs text-muted-foreground">
@@ -515,6 +519,18 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  const v = (value ?? "").toString().trim();
+  const isUnavailable =
+    v.length === 0 ||
+    v === "-" ||
+    v === "—" ||
+    v === "?" ||
+    v.toLowerCase() === "unknown" ||
+    v.toLowerCase() === "not available" ||
+    v.toLowerCase() === "n/a" ||
+    v.toLowerCase() === "no data";
+
+  if (isUnavailable) return null;
   return (
     <div className="min-w-0">
       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>

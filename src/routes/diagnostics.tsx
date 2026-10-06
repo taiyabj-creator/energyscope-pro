@@ -139,6 +139,19 @@ function StatusCard({
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const v = (value ?? "").toString().trim();
+  const isUnavailable =
+    v.length === 0 ||
+    v === "-" ||
+    v === "—" ||
+    v === "?" ||
+    v.toLowerCase() === "unknown" ||
+    v.toLowerCase() === "not available" ||
+    v.toLowerCase() === "n/a" ||
+    v.toLowerCase() === "no data" ||
+    v.toLowerCase() === "unavailable";
+
+  if (isUnavailable) return null;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-4 border-b border-border/50 pb-3 last:border-0 last:pb-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
