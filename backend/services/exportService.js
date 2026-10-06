@@ -1,5 +1,6 @@
 const { getPlantStatus, utlFetch } = require("./utlApi");
 const { istDateString } = require("./archiveService");
+const { eachCalendarDate, monthKeysBetween, normalizeChartDate } = require("./exportScope");
 
 function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -107,8 +108,57 @@ async function getLast30DaysGeneration(jwtToken, session, referenceDate = new Da
   return history;
 }
 
+/**
+ * Authoritative production history for an inclusive date range, from UTL's own
+ * monthly chart endpoint - the same source the History page's Daily tab reads,
+ * so an export never disagrees with the values already on screen.
+ *
+ * UTL's monthly endpoint returns one row per day of the requested month with a
+ * day-of-month `date`, so a range is served by fetching each month it touches
+ * exactly once. Every calendar day in the range is returned, including days UTL
+ * has no row for: those come back as `{ recorded: false, kwh: null }` so the
+ * export can distinguish "no record" from a genuine 0 kWh day instead of
+ * silently zero-filling.
+ *
+ * @param {string} jwtToken
+ * @param {object} session
+ * @param {{from: string, to: string}} bounds inclusive 'YYYY-MM-DD'
+ * @returns {Promise<Array<{date: string, kwh: number|null, recorded: boolean}>>}
+ */
+async function getProductionHistory(jwtToken, session, { from, to } = {}) {
+  const monthKeys = monthKeysBetween(from, to);
+  const responses = await Promise.all(
+    monthKeys.map((key) => postChart(jwtToken, session, "monthly", key)),
+  );
+
+  const byDate = new Map();
+
+  responses.forEach((response, index) => {
+    const key = monthKeys[index];
+    const year = Number(key.slice(0, 4));
+    const month = Number(key.slice(5, 7));
+
+    for (const point of response?.results ?? []) {
+      const date = normalizeChartDate(point.date, year, month);
+      if (!date) continue;
+
+      const kwh = Number(point.PvProduction);
+      if (!Number.isFinite(kwh)) continue;
+
+      byDate.set(date, kwh);
+    }
+  });
+
+  return eachCalendarDate(from, to).map((date) =>
+    byDate.has(date)
+      ? { date, kwh: byDate.get(date), recorded: true }
+      : { date, kwh: null, recorded: false },
+  );
+}
+
 module.exports = {
   postChart,
   getExportData,
   getLast30DaysGeneration,
+  getProductionHistory,
 };

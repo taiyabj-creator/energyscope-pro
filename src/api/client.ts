@@ -51,50 +51,123 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const normalizedEndpoint = endpoint.startsWith("/api/")
+function normalizeEndpoint(endpoint: string) {
+  return endpoint.startsWith("/api/")
     ? endpoint.slice(4)
     : endpoint.startsWith("/")
       ? endpoint
       : `/${endpoint}`;
+}
 
-  const response = await fetch(`${BASE_URL}${normalizedEndpoint}`, {
+/**
+ * The single place request headers are assembled. Both `apiRequest` and
+ * `apiBlob` go through it, so authenticated binary downloads (exports) are
+ * guaranteed to carry exactly the same credentials as every other API call -
+ * there is no second, weaker auth path.
+ */
+function buildHeaders(options: RequestInit): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+
+    ...(authToken
+      ? {
+          Authorization: `Bearer ${authToken}`,
+        }
+      : {}),
+
+    "x-device-id": deviceId,
+
+    ...((options.headers as Record<string, string>) || {}),
+  };
+}
+
+async function readErrorCode(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json();
+
+    if (body && typeof body.error === "string") {
+      return body.error;
+    }
+
+    if (body && typeof body.message === "string") {
+      return body.message;
+    }
+  } catch {
+    // Response was not JSON — keep the caller's fallback.
+  }
+
+  return fallback;
+}
+
+export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${BASE_URL}${normalizeEndpoint(endpoint)}`, {
     ...options,
 
-    headers: {
-      "Content-Type": "application/json",
-
-      ...(authToken
-        ? {
-            Authorization: `Bearer ${authToken}`,
-          }
-        : {}),
-
-      "x-device-id": deviceId,
-
-      ...(options.headers || {}),
-    },
+    headers: buildHeaders(options),
   });
 
   if (!response.ok) {
-    let errorCode = "AUTH_SERVICE_ERROR";
-
-    try {
-      const body = await response.json();
-
-      if (body && typeof body.error === "string") {
-        errorCode = body.error;
-      } else if (body && typeof body.message === "string") {
-        errorCode = body.message;
-      }
-    } catch {
-      // Response was not JSON — keep default code.
-    }
-
-    throw new ApiError(errorCode);
+    throw new ApiError(await readErrorCode(response, "AUTH_SERVICE_ERROR"));
   }
 
   return response.json();
+}
+
+export interface ApiBlobResponse {
+  blob: Blob;
+  /** Server-chosen download name from Content-Disposition, when present. */
+  filename: string | null;
+}
+
+function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+
+  const encoded = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]!.trim());
+    } catch {
+      // Fall through to the plain form.
+    }
+  }
+
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(header);
+  return plain ? plain[1]!.trim() : null;
+}
+
+/**
+ * Authenticated download of a binary/text body (CSV, XLSX, PDF).
+ *
+ * `apiRequest` cannot be reused for this: it hardcodes a JSON content type and
+ * always parses the response as JSON. This shares the identical header builder,
+ * so auth stays exactly as strict as every other API call - nothing is weakened
+ * and no endpoint is made public.
+ */
+export async function apiBlob(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<ApiBlobResponse> {
+  const response = await fetch(`${BASE_URL}${normalizeEndpoint(endpoint)}`, {
+    ...options,
+
+    headers: buildHeaders(options),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      await readErrorCode(
+        response,
+        response.status === 401
+          ? "Authentication required"
+          : "The server could not complete the request.",
+      ),
+    );
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFromDisposition(response.headers.get("Content-Disposition")),
+  };
 }
 
 export async function logoutRequest() {

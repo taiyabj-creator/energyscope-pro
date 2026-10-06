@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Download, KeyRound, Printer, Search } from "lucide-react";
 import { Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
 import { ManualArchiveEntryDialog } from "@/components/cards/ManualArchiveEntryDialog";
+import { ProductionExportDialog } from "@/components/cards/ProductionExportDialog";
 import { Toaster } from "@/components/ui/sonner";
 import {
   useDailyHistory,
@@ -63,6 +64,8 @@ function HistoryPage() {
   // only exists in the "EnergyScope Archive" source of this page - never on
   // the live dashboard and never while viewing UTL Live history.
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
+  // Shared, authenticated production export (same component as Settings).
+  const [exportOpen, setExportOpen] = useState(false);
 
   const isArchive = source === "archive";
   const utlDaily = useDailyHistory(selectedDate);
@@ -109,7 +112,12 @@ function HistoryPage() {
 
   useEffect(() => setPage(1), [tab, selectedDate, search]);
 
-  const exportRows = () =>
+  /**
+   * Archive rows are already in memory, so that source keeps exporting exactly
+   * what is on screen. UTL rows go through the shared export dialog instead, so
+   * Settings and History produce identical, server-generated files.
+   */
+  const exportArchiveRows = () =>
     downloadCsv(
       `utl-solar-${tab}-history.csv`,
       filteredRows.map((row) => ({
@@ -136,10 +144,10 @@ function HistoryPage() {
             )}
             <button
               type="button"
-              onClick={exportRows}
+              onClick={() => (isArchive ? exportArchiveRows() : setExportOpen(true))}
               className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/60"
             >
-              <Download className="size-3.5" /> Export CSV
+              <Download className="size-3.5" /> {isArchive ? "Export CSV" : "Export"}
             </button>
             <button
               type="button"
@@ -369,6 +377,13 @@ function HistoryPage() {
       )}
 
       <ManualArchiveEntryDialog open={manualEntryOpen} onOpenChange={setManualEntryOpen} />
+
+      <ProductionExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        initialScope={tab === "yearly" ? "year" : "month"}
+      />
+
       <Toaster position="top-center" />
     </Panel>
   );
