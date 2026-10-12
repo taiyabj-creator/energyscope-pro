@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { getProductionHistory } = require("../services/exportService");
+const { getProductionHistory, getArchiveProductionHistory } = require("../services/exportService");
 const {
   generateHistoryCsv,
   generateHistoryExcel,
@@ -81,10 +81,27 @@ async function handleExportRequest(req, res, fallbacks = {}) {
       year: param(req, "year", fallbacks.year),
     });
 
-    const rows = await getProductionHistory(req.token, req.session, {
-      from: resolved.from,
-      to: resolved.to,
-    });
+    const source = String(param(req, "source", fallbacks.source) ?? "utl")
+      .trim()
+      .toLowerCase();
+    if (source !== "utl" && source !== "archive") {
+      throw new ExportScopeError(
+        `Unsupported export source "${source}". Use one of: utl, archive.`,
+      );
+    }
+
+    const rows =
+      source === "archive"
+        ? await getArchiveProductionHistory({
+            from: resolved.from,
+            to: resolved.to,
+          })
+        : await getProductionHistory(req.token, req.session, {
+            from: resolved.from,
+            to: resolved.to,
+          });
+
+    const dataSourceLabel = source === "archive" ? "Archive Data" : "UTL Production Data";
 
     const body = await spec.generate({
       rows,
@@ -94,13 +111,15 @@ async function handleExportRequest(req, res, fallbacks = {}) {
         summary: summarizeProductionHistory(rows),
         generatedOn: generatedOnLabel(),
         plant: plantMeta(),
+        dataSource: dataSourceLabel,
       }),
     });
 
     res.setHeader("Content-Type", spec.contentType);
+    const filenamePrefix = source === "archive" ? "archive-production" : "utl-production";
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="utl-production-${periodSlug(resolved.label)}.${spec.extension}"`,
+      `attachment; filename="${filenamePrefix}-${periodSlug(resolved.label)}.${spec.extension}"`,
     );
     // No-store: an export is a point-in-time snapshot and must never be cached.
     res.setHeader("Cache-Control", "no-store");

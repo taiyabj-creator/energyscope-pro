@@ -68,6 +68,11 @@ function HistoryPage() {
   const [exportOpen, setExportOpen] = useState(false);
 
   const isArchive = source === "archive";
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("history-source", source);
+    }
+  }, [source]);
   const utlDaily = useDailyHistory(selectedDate);
   const utlMonthly = useMonthlyHistory(selectedDate.getFullYear());
   const utlYearly = useYearlyHistory();
@@ -117,14 +122,9 @@ function HistoryPage() {
    * what is on screen. UTL rows go through the shared export dialog instead, so
    * Settings and History produce identical, server-generated files.
    */
-  const exportArchiveRows = () =>
-    downloadCsv(
-      `utl-solar-${tab}-history.csv`,
-      filteredRows.map((row) => ({
-        [tab === "daily" ? "Date" : tab === "monthly" ? "Month" : "Year"]: row.period,
-        "Generation (kWh)": row.generation,
-      })),
-    );
+  const handleExportClick = () => {
+    setExportOpen(true);
+  };
 
   return (
     <Panel>
@@ -144,10 +144,10 @@ function HistoryPage() {
             )}
             <button
               type="button"
-              onClick={() => (isArchive ? exportArchiveRows() : setExportOpen(true))}
+              onClick={handleExportClick}
               className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/60"
             >
-              <Download className="size-3.5" /> {isArchive ? "Export CSV" : "Export"}
+              <Download className="size-3.5" /> Export
             </button>
             <button
               type="button"
@@ -381,7 +381,7 @@ function HistoryPage() {
       <ProductionExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}
-        initialScope={tab === "yearly" ? "year" : "month"}
+        initialScope={tab === "daily" ? "date" : tab === "monthly" ? "month" : "year"}
       />
 
       <Toaster position="top-center" />

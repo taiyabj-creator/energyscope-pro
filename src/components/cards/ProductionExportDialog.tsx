@@ -36,6 +36,7 @@ import {
   type ExportFormat,
   type ExportScope,
   type ExportSelection,
+  type ExportSource,
 } from "@/services/exportService";
 import { istTodayKey } from "@/utils/currentDayGeneration";
 import { cn } from "@/lib/utils";
@@ -92,6 +93,7 @@ function defaultSelection(): ExportSelection {
 
   return {
     scope: "month",
+    source: "utl",
     date: today,
     from: monthStart,
     to: today,
@@ -116,7 +118,16 @@ export function ProductionExportDialog({
     if (!open) return;
 
     setStep("scope");
-    setSelection({ ...defaultSelection(), ...(initialScope ? { scope: initialScope } : {}) });
+    const location = typeof window !== "undefined" ? window.location.pathname : "";
+    const isArchiveView = location.includes("/history") && true; // history route; check if archive source selected? but dialog opened from history; history component knows isArchive - but dialog is shared
+    setSelection({
+      ...defaultSelection(),
+      ...(initialScope ? { scope: initialScope } : {}),
+      source:
+        typeof window !== "undefined" && window.location.pathname.includes("/history")
+          ? (localStorage.getItem("history-source") as ExportSource) || "utl"
+          : "utl",
+    });
     setFormat(initialFormat ?? "csv");
     setPending(null);
     setError(null);
@@ -190,6 +201,34 @@ export function ProductionExportDialog({
 
         {step === "scope" ? (
           <div className="grid gap-4 py-1">
+            <div className="grid gap-2">
+              <Label>Data source</Label>
+              <RadioGroup
+                value={selection.source ?? "utl"}
+                onValueChange={(value) => patch({ source: value as ExportSource })}
+                className="gap-2"
+              >
+                <Label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/50 has-[[data-state=checked]]:border-primary/60 has-[[data-state=checked]]:bg-primary/5">
+                  <RadioGroupItem value="utl" className="mt-0.5" />
+                  <div className="grid gap-1">
+                    <span className="text-sm font-medium">UTL Production Data</span>
+                    <span className="text-xs text-muted-foreground">
+                      Live/UTL-sourced production data
+                    </span>
+                  </div>
+                </Label>
+                <Label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/50 has-[[data-state=checked]]:border-primary/60 has-[[data-state=checked]]:bg-primary/5">
+                  <RadioGroupItem value="archive" className="mt-0.5" />
+                  <div className="grid gap-1">
+                    <span className="text-sm font-medium">Archive Data</span>
+                    <span className="text-xs text-muted-foreground">
+                      Canonical archived historical production data
+                    </span>
+                  </div>
+                </Label>
+              </RadioGroup>
+            </div>
+
             <div className="grid gap-2">
               <Label>Select data to export</Label>
               <RadioGroup

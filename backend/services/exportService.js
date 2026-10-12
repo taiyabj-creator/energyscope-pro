@@ -1,5 +1,5 @@
 const { getPlantStatus, utlFetch } = require("./utlApi");
-const { istDateString } = require("./archiveService");
+const { getDailyRows, istDateString } = require("./archiveService");
 const { eachCalendarDate, monthKeysBetween, normalizeChartDate } = require("./exportScope");
 
 function monthKey(date) {
@@ -156,9 +156,40 @@ async function getProductionHistory(jwtToken, session, { from, to } = {}) {
   );
 }
 
+async function getArchiveProductionHistory({ from, to } = {}) {
+  const rows = await getDailyRows({ from, to });
+  const byDate = new Map();
+  for (const row of rows) {
+    const date = row.date;
+    if (!date) continue;
+    const kwh = row.kwh === null || row.kwh === undefined ? null : Number(row.kwh);
+    if (kwh !== null && !Number.isFinite(kwh)) continue;
+    byDate.set(date, {
+      kwh,
+      source: row.source || null,
+      isManualOverride: !!row.isManualOverride,
+    });
+  }
+
+  return eachCalendarDate(from, to).map((date) => {
+    if (byDate.has(date)) {
+      const v = byDate.get(date);
+      return {
+        date,
+        kwh: v.kwh,
+        recorded: v.kwh !== null && v.kwh !== undefined,
+        source: v.source,
+        isManualOverride: v.isManualOverride,
+      };
+    }
+    return { date, kwh: null, recorded: false };
+  });
+}
+
 module.exports = {
   postChart,
   getExportData,
   getLast30DaysGeneration,
   getProductionHistory,
+  getArchiveProductionHistory,
 };

@@ -19,13 +19,13 @@ function recordLabel(row) {
  * Header block shared by all three formats so a user can always tell WHICH
  * period a file covers and WHEN it was produced.
  */
-function buildMeta({ resolved, summary, generatedOn, plant }) {
+function buildMeta({ resolved, summary, generatedOn, plant, dataSource }) {
   return {
     plantName: plant.name,
     plantLocation: plant.location,
     periodLabel: resolved.label,
     generatedOn,
-    dataSource: "UTL Production Data",
+    dataSource: dataSource || "UTL Production Data",
     summary,
   };
 }
@@ -49,10 +49,20 @@ function generateHistoryCsv({ rows, meta }) {
   lines.push(["Generated on", meta.generatedOn]);
   lines.push(["Data source", meta.dataSource]);
   lines.push([]);
-  lines.push(["Date", "Generation (kWh)", "Record"]);
+  const hasProvenance = rows.some((r) => r.source || r.isManualOverride);
+  if (hasProvenance) {
+    lines.push(["Date", "Generation (kWh)", "Record", "Source", "Manual Override"]);
+  } else {
+    lines.push(["Date", "Generation (kWh)", "Record"]);
+  }
 
   for (const row of rows) {
-    lines.push([row.date, row.recorded ? String(row.kwh) : "", recordLabel(row)]);
+    const base = [row.date, row.recorded ? String(row.kwh) : "", recordLabel(row)];
+    if (hasProvenance) {
+      base.push(row.source || "");
+      base.push(row.isManualOverride ? "Yes" : "No");
+    }
+    lines.push(base);
   }
 
   lines.push([]);
@@ -75,18 +85,28 @@ async function generateHistoryExcel({ rows, meta }) {
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet("Production History");
+  const hasProvenance = rows.some((r) => r.source || r.isManualOverride);
   sheet.columns = [
     { header: "Date", key: "date", width: 14 },
     { header: "Generation (kWh)", key: "kwh", width: 18 },
     { header: "Record", key: "record", width: 18 },
   ];
+  if (hasProvenance) {
+    sheet.columns.push({ header: "Source", key: "source", width: 16 });
+    sheet.columns.push({ header: "Manual Override", key: "manualOverride", width: 16 });
+  }
 
   for (const row of rows) {
-    sheet.addRow({
+    const data = {
       date: row.date,
       kwh: row.recorded ? row.kwh : null,
       record: recordLabel(row),
-    });
+    };
+    if (hasProvenance) {
+      data.source = row.source || "";
+      data.manualOverride = row.isManualOverride ? "Yes" : "No";
+    }
+    sheet.addRow(data);
   }
 
   sheet.addRow({});
@@ -132,8 +152,11 @@ function generateHistoryPdf({ rows, meta }) {
 
     const left = doc.page.margins.left;
     const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const colGeneration = left + contentWidth * 0.52;
-    const colRecord = left + contentWidth * 0.8;
+    const hasProvenance = rows.some((r) => r.source || r.isManualOverride);
+    const colGeneration = hasProvenance ? left + contentWidth * 0.42 : left + contentWidth * 0.52;
+    const colRecord = hasProvenance ? left + contentWidth * 0.62 : left + contentWidth * 0.8;
+    const colSource = hasProvenance ? left + contentWidth * 0.78 : colRecord;
+    const colManual = hasProvenance ? left + contentWidth * 0.88 : colRecord;
     const ROW_HEIGHT = 14;
 
     doc.font("Helvetica-Bold").fontSize(18).fillColor(INK).text("EnergyScope Pro");
@@ -152,12 +175,24 @@ function generateHistoryPdf({ rows, meta }) {
     const drawHeader = () => {
       const y = doc.y;
       doc.font("Helvetica-Bold").fontSize(10).fillColor(INK);
-      doc.text("Date", left, y, { width: contentWidth * 0.5 });
+      doc.text("Date", left, y, { width: hasProvenance ? contentWidth * 0.4 : contentWidth * 0.5 });
       doc.text("Generation (kWh)", colGeneration, y, {
-        width: contentWidth * 0.26,
+        width: hasProvenance ? contentWidth * 0.18 : contentWidth * 0.26,
         align: "right",
       });
-      doc.text("Record", colRecord, y, { width: contentWidth * 0.2, align: "right" });
+      doc.text("Record", colRecord, y, {
+        width: hasProvenance ? contentWidth * 0.16 : contentWidth * 0.2,
+        align: hasProvenance ? "left" : "right",
+      });
+      if (hasProvenance) {
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(8)
+          .fillColor(INK)
+          .text("Source", colSource, y, { width: contentWidth * 0.1, align: "left" })
+          .text("Manual", colManual, y, { width: contentWidth * 0.12, align: "left" });
+      }
+
       doc.y = y + 3;
       doc
         .moveTo(left, doc.y)
@@ -180,14 +215,24 @@ function generateHistoryPdf({ rows, meta }) {
       }
 
       const y = doc.y;
-      doc.text(row.date, left, y, { width: contentWidth * 0.5 });
-      doc.text(row.recorded ? row.kwh.toFixed(2) : "—", colGeneration, y, {
-        width: contentWidth * 0.26,
+      doc.text(row.date, left, y, {
+        width: hasProvenance ? contentWidth * 0.4 : contentWidth * 0.5,
+      });
+      doc.text(row.recorded ? row.kwh.toFixed(row.kwh >= 100 ? 0 : 2) : "-", colGeneration, y, {
+        width: hasProvenance ? contentWidth * 0.18 : contentWidth * 0.26,
         align: "right",
       });
-      doc
-        .fillColor(row.recorded ? BODY : MUTED)
-        .text(recordLabel(row), colRecord, y, { width: contentWidth * 0.2, align: "right" });
+      doc.fillColor(row.recorded ? BODY : MUTED).text(recordLabel(row), colRecord, y, {
+        width: hasProvenance ? contentWidth * 0.16 : contentWidth * 0.2,
+        align: hasProvenance ? "left" : "right",
+      });
+      if (hasProvenance) {
+        doc.text(row.source || "", colSource, y, { width: contentWidth * 0.1, align: "left" });
+        doc.text(row.isManualOverride ? "Yes" : "No", colManual, y, {
+          width: contentWidth * 0.12,
+          align: "left",
+        });
+      }
       doc.fillColor(BODY);
       doc.y = y + ROW_HEIGHT;
     }

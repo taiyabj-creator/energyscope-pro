@@ -13,9 +13,11 @@ import { downloadBlob } from "@/utils/format";
 
 export type ExportScope = "date" | "range" | "month" | "year";
 export type ExportFormat = "csv" | "xlsx" | "pdf";
+export type ExportSource = "utl" | "archive";
 
 export interface ExportSelection {
   scope: ExportScope;
+  source?: ExportSource;
   /** YYYY-MM-DD, used when scope is "date". */
   date: string;
   /** YYYY-MM-DD, used when scope is "range". */
@@ -167,7 +169,8 @@ export function validateExportSelection(selection: ExportSelection): string | nu
  * scope are sent, which is also what the server requires.
  */
 export function buildExportQuery(selection: ExportSelection, format: ExportFormat): string {
-  const params = new URLSearchParams({ format, scope: selection.scope });
+  const source = selection.source ?? "utl";
+  const params = new URLSearchParams({ format, scope: selection.scope, source });
 
   if (selection.scope === "date") {
     params.set("date", selection.date);
@@ -185,12 +188,14 @@ export function buildExportQuery(selection: ExportSelection, format: ExportForma
 
 /** Deterministic fallback name, used only if the server sends no Content-Disposition. */
 function fallbackFilename(selection: ExportSelection, format: ExportFormat): string {
+  const source = selection.source ?? "utl";
+  const prefix = source === "archive" ? "archive-production" : "utl-production";
   const slug =
     describeExportPeriod(selection)
       ?.label.toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") ?? "period";
-  return `utl-production-${slug || "period"}.${format}`;
+  return `${prefix}-${slug || "period"}.${format}`;
 }
 
 /** User-facing message for a failed export. Raw backend JSON is never shown. */
