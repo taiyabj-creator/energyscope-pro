@@ -55,7 +55,7 @@ export function MetricCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] }}
       whileHover={{ y: -3 }}
-      className="panel group relative overflow-hidden p-5"
+      className="panel group relative flex h-full flex-col overflow-hidden p-5"
     >
       <div
         className={cn(
@@ -100,7 +100,7 @@ export function MetricCard({
         )}
       </div>
 
-      <div className="relative mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+      <div className="relative mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-3 text-[11px]">
         {typeof trend === "number" ? <Trend value={trend} /> : null}
         {footnote ? <span className="text-muted-foreground">{footnote}</span> : null}
         {source ? (
