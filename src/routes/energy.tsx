@@ -4,7 +4,12 @@ import { MetricCard } from "@/components/cards/MetricCard";
 import { EnergyChart } from "@/components/charts/EnergyChart";
 import { PowerFlow } from "@/components/widgets/PowerFlow";
 import { Panel, PanelHeading } from "@/components/ui/primitives";
-import { useEnergyTotals, useLogger, useTodayDaySeries } from "@/hooks/useSolarData";
+import {
+  useArchiveSummary,
+  useEnergyTotals,
+  useLogger,
+  useTodayDaySeries,
+} from "@/hooks/useSolarData";
 import { selectLatestDaySample } from "@/services/solarService";
 import { formatEnergy, formatLifetimeEnergy, formatPower } from "@/utils/format";
 
@@ -30,6 +35,10 @@ function EnergyPage() {
   const { data: todaySeries } = useTodayDaySeries();
   const { data: totals } = useEnergyTotals();
   const { data: logger } = useLogger();
+  // Monthly / yearly history is canonical display history, so it comes from the
+  // EnergyScope Archive; lifetime generation is the UTL inverter's cumulative
+  // counter and today stays on the live UTL source.
+  const { data: archive } = useArchiveSummary();
 
   const loggerOnline = logger?.status === "online";
   const currentPowerWatts = loggerOnline ? (selectLatestDaySample(todaySeries)?.value ?? 0) : 0;
@@ -50,31 +59,35 @@ function EnergyPage() {
           unit="kWh"
           icon={Sun}
           tone="solar"
-          footnote="Cumulative since midnight"
+          footnote="Cumulative since midnight (UTL)"
         />
         <MetricCard
           title="This month"
-          value={formatEnergy(totals?.month ?? 0).value}
-          unit={formatEnergy(totals?.month ?? 0).unit}
+          value={archive?.month != null ? formatEnergy(archive.month).value : "—"}
+          unit={archive?.month != null ? formatEnergy(archive.month).unit : undefined}
           icon={CalendarRange}
           tone="solar"
-          footnote="UTL monthly chart"
+          footnote="EnergyScope Archive · recorded days"
         />
         <MetricCard
           title="This year"
-          value={formatEnergy(totals?.year ?? 0).value}
-          unit={formatEnergy(totals?.year ?? 0).unit}
+          value={archive?.year != null ? formatEnergy(archive.year).value : "—"}
+          unit={archive?.year != null ? formatEnergy(archive.year).unit : undefined}
           icon={TrendingUp}
           tone="solar"
-          footnote="Sum of UTL yearly chart months"
+          footnote="EnergyScope Archive · recorded days"
         />
         <MetricCard
           title="Lifetime"
-          value={formatLifetimeEnergy(totals?.total ?? 0).value}
-          unit={formatLifetimeEnergy(totals?.total ?? 0).unit}
+          value={totals?.total != null ? formatLifetimeEnergy(totals.total).value : "—"}
+          unit={totals?.total != null ? formatLifetimeEnergy(totals.total).unit : undefined}
           icon={Leaf}
           tone="solar"
-          footnote="Inverter lifetime total"
+          footnote={
+            totals?.total != null
+              ? "UTL Solar RMS · cumulative inverter output"
+              : "Lifetime value unavailable from UTL"
+          }
         />
       </div>
 

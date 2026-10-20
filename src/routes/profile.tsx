@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MapPin, Sun, Users } from "lucide-react";
 import { Panel, PanelHeading } from "@/components/ui/primitives";
-import { useEnergyTotals, usePlantInfo } from "@/hooks/useSolarData";
+import { useArchiveSummary, useEnergyTotals, usePlantInfo } from "@/hooks/useSolarData";
 import { formatDate, formatLifetimeEnergy, plantAge } from "@/utils/format";
 
 export const Route = createFileRoute("/profile")({
@@ -26,8 +26,12 @@ export const Route = createFileRoute("/profile")({
 function ProfilePage() {
   const { data: plant } = usePlantInfo();
   const { data: totals } = useEnergyTotals();
+  // Year and month display totals come from the canonical EnergyScope Archive;
+  // lifetime generation is the UTL inverter's own cumulative counter and today
+  // stays on the live UTL source.
+  const { data: archive } = useArchiveSummary();
   const age = plantAge(plant?.installationDate ?? new Date().toISOString());
-  const lifetime = formatLifetimeEnergy(totals?.total ?? 0);
+  const lifetimeEnergy = totals?.total != null ? formatLifetimeEnergy(totals.total) : null;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
@@ -67,25 +71,51 @@ function ProfilePage() {
           subtitle="Cumulative results for this installation"
         />
         <div className="grid grid-cols-2 gap-5">
-          <Big label="Lifetime generation" value={`${lifetime.value} ${lifetime.unit}`} />
-          <Big label="This year" value={`${(totals?.year ?? 0).toFixed(0)} kWh`} />
-          <Big label="This month" value={`${(totals?.month ?? 0).toFixed(0)} kWh`} />
+          <Big
+            label="Lifetime generation"
+            value={
+              lifetimeEnergy
+                ? `${lifetimeEnergy.value} ${lifetimeEnergy.unit}`
+                : totals
+                  ? "Unavailable from UTL"
+                  : "—"
+            }
+            footnote={lifetimeEnergy ? "UTL Solar RMS · cumulative inverter output" : undefined}
+          />
+          <Big
+            label="This year"
+            value={archive?.year != null ? `${archive.year.toFixed(0)} kWh` : "—"}
+          />
+          <Big
+            label="This month"
+            value={archive?.month != null ? `${archive.month.toFixed(0)} kWh` : "—"}
+          />
           <Big label="Today" value={`${(totals?.today ?? 0).toFixed(2)} kWh`} />
         </div>
         <p className="mt-6 text-xs text-muted-foreground">
           This dashboard is read-only and holds no account credentials — profile data comes from the
-          plant record.
+          plant record. Year and month totals are recorded by the EnergyScope Archive; lifetime
+          generation is the UTL inverter's cumulative counter; today's value is a live UTL reading.
         </p>
       </Panel>
     </div>
   );
 }
 
-function Big({ label, value }: { label: string; value: string }) {
+function Big({
+  label,
+  value,
+  footnote,
+}: {
+  label: string;
+  value: string;
+  footnote?: string | undefined;
+}) {
   return (
     <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="num mt-1.5 text-xl font-semibold">{value}</p>
+      {footnote ? <p className="mt-1 text-[11px] text-muted-foreground">{footnote}</p> : null}
     </div>
   );
 }

@@ -16,6 +16,13 @@ The goal of the project is to build a faster, cleaner, and more feature-rich alt
 - Two data sources on the dashboard and History pages: **UTL Data** (live from
   UTL) and **EnergyScope Archive** (the application's own archive), switchable
   per card / per page
+- The **archive is the source of truth for historical metrics**: Dashboard month
+  and year totals, Analytics, the History archive view and the AI assistant all
+  read the same canonical archive values, and days without a record are reported
+  as coverage rather than zero-filled. The Dashboard **lifetime** card is the one
+  exception: it shows the UTL inverter's own cumulative counter, not an archive
+  total. The exact rule per view is documented in `ARCHITECTURE.md` →
+  "Historical data flow"
 - Manual Archive Entry: an operator can correct or backfill a single archived
   day from **History → EnergyScope Archive**. The entry is protected by an
   additional master password, is recorded in an audit log, and is never
@@ -26,9 +33,12 @@ The goal of the project is to build a faster, cleaner, and more feature-rich alt
 - Weather dashboard
 - Smart daily energy prediction (weather-based base, corrected by historical
   similarity/recency-weighted residuals) with per-day observed weather history
-- Production analytics and performance insights
+- Production analytics and performance insights (archive-backed heatmap,
+  monthly trend, best/worst/average day, month-over-month)
 - Maintenance history module
-- Data export (PDF / Excel)
+- Data export (CSV / Excel / PDF) for either source — **UTL Production Data** or
+  **EnergyScope Archive** — scoped to a date, range, month or year, with
+  provenance columns for operator-entered archive days
 - Authentication with JWT and server-side sessions
 - Responsive dashboard with dark / light theme
 - Modern UI built with shadcn/ui and Radix UI
@@ -136,7 +146,7 @@ AGENTS.md              AI coding assistant guidelines
 
 # Development Status
 
-Current release: **v1.2.0** (active development).
+Current release: **v1.2.1** (active development).
 
 The project has moved beyond the prototype stage: the dashboard, live monitoring, historical archiving, exports, maintenance, and weather features are implemented and deployed. See `PROJECT_ROADMAP.md` for the detailed roadmap.
 
@@ -320,6 +330,6 @@ This project is under active development. A license will be selected before wide
 
 # Version
 
-Current version: **v1.2.0**
+Current version: **v1.2.1**
 
 Status: actively developed.

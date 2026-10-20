@@ -4,7 +4,7 @@
 > Planned or future architecture is explicitly labelled **Planned** and must never be
 > described as if it already exists.
 >
-> Status: reflects the repository at release **v1.2.0** and later work on `main`.
+> Status: reflects the repository at version **v1.2.1** and later work on `main`.
 
 ---
 
@@ -171,11 +171,14 @@ backend/
         sessionService.js     encrypted session storage/retrieval
         authService.js        credential verification, session lifecycle
         archiveCollector.js   gap-aware daily archive collection
-        archiveService.js     archive queries/aggregates, manual overrides
+        archiveService.js     archive queries + canonical generation aggregates
+                              (getRangeSummary / getDailyRows / getYearAnalytics),
+                              manual overrides, IST calendar helper
         masterPasswordService.js scrypt verification for manual archive entry
-exportService.js      export data assembly (UTL chart reads)
-exportScope.js        pure export scope resolution/validation + IST labels
-exportGenerator.js    csv/xlsx/pdf generation for a scoped period
+        exportService.js      export data assembly (UTL chart history and
+                              canonical archive history with provenance)
+        exportScope.js        pure export scope resolution/validation + IST labels
+        exportGenerator.js    csv/xlsx/pdf generation for a scoped period
         weatherService.js     Open-Meteo forecast client (server-side)
         predictionService.js  next-day energy prediction
         performanceScore.js   performance score computation
@@ -236,6 +239,37 @@ Nitro (TanStack Start server)  ── routeRules proxy ──►  Express backen
 - Live inverter/plant/chart data is always fetched live from UTL at request time.
 - Historical data is served from the backend's own SQLite archive.
 
+### Historical data flow — archive is the source of truth
+
+The EnergyScope Archive is the source of truth for every **historical** metric;
+UTL remains the source for **live/current** values. All archive-backed consumers
+read through the same canonical helpers in `backend/services/archiveService.js`
+(§17), so the Dashboard, Analytics, History and the AI assistant cannot report
+different numbers for the same period. The one deliberate exception is the
+Dashboard **lifetime** card, which reports the UTL inverter's own cumulative
+counter (a live reading, not a stored archive aggregate) — see the table below.
+
+| Consumer | Source | Window / rule |
+| --- | --- | --- |
+| Dashboard "Today" card | UTL live scalar | IST current-day check (§3); never the archive |
+| Dashboard month card | archive `GET /api/archive/summary` | `YYYY-MM-01` → latest archived day in the current IST month |
+| Dashboard year card | archive `GET /api/archive/summary` | first → latest archived day of the year |
+| Dashboard lifetime card | UTL inverter counter | `daily_energy_produced` from `GET /api/inverter` — cumulative all-time output in kWh; never the archive total or the daily counter |
+| Analytics | archive `GET /api/archive/analytics?year=` | recorded days of that year; latest-completed-month pair for MoM |
+| History → UTL Live tab | `GET /api/charts/*` | verbatim UTL values (unchanged) |
+| History → EnergyScope Archive tab | `GET /api/archive/daily|monthly` | canonical rows plus `daysReported` coverage |
+| Solar assistant context (`plantContextService`) | archive + UTL | archive for month/recent days, UTL for today/live |
+| Prediction (`routes/prediction.js`) | UTL + archive | UTL completed-day baseline (kept identical to the assistant); archive correction/rank |
+
+Month-over-month is **intentionally** different per view: the Dashboard's "This
+month" trend compares the **partial** current month against the **whole**
+previous calendar month, while Analytics' month-over-month compares the **latest
+completed** month with the month immediately before it (both completed). Both are
+correct for their own question; do not unify them without a product decision.
+
+Archive-backed aggregates are never derived from live UTL history, and missing
+archive days are never zero-filled — coverage is reported instead (§17).
+
 ### Manual Archive Entry request flow
 
 Available only from **History → EnergyScope Archive**, never on the dashboard:
@@ -276,44 +310,55 @@ archiveService.upsertManualOverride({ generationDate, generationKwh })
 
 Settings and Generation History share one dialog
 (`src/components/cards/ProductionExportDialog.tsx`) and one request contract
-(`src/services/exportService.ts`):
+(`src/services/exportService.ts`). Either data source can be exported:
 
 ```
 Settings "Export CSV / Excel / PDF"  ─┐
-History "Export" (UTL source)        ─┴─► scope step: date | range | month | year
+History "Export" button              ─┴─► scope step: data source (utl | archive)
+                                             + date | range | month | year
                                             │
                                             ▼ confirm step: period, day count,
                                               "No record" note, format choice
                                             │
                                             ▼
-                              GET /api/export?format=&scope=…
-                                    │        (Authorization: Bearer …,
-                                    │         x-device-id — built by
-                                    │         src/api/client.ts apiBlob)
-                                    ▼
+                                  GET /api/export?format=&scope=&source=…
+                                        │        (Authorization: Bearer …,
+                                        │         x-device-id — built by
+                                        │         src/api/client.ts apiBlob)
+                                        ▼
 authMiddleware → export.js → exportScope.resolveExportScope()
-                              → exportService.getProductionHistory()
+                              → exportService.getProductionHistory()         source=utl
+                                exportService.getArchiveProductionHistory()  source=archive
                               → exportGenerator (csv | xlsx | pdf)
 ```
 
+- **Source selection.** `source=utl` reads UTL's `monthly` chart endpoint — the
+  values UTL returns; `source=archive` reads `getDailyRows()` — canonical
+  generation (§17). The History page writes its active tab to `localStorage`
+  (`history-source`) and the dialog pre-selects it when opened from History;
+  every other caller defaults to `utl`. Metadata labels the file **UTL
+  Production Data** or **Archive Data**, and archive files are named
+  `archive-production-<period>.<ext>`.
 - **Authentication is unchanged.** Exports go through the app's own API client, so
   they carry the same bearer token as every other request. A direct browser
   navigation (`window.open("/api/export/...")`) cannot send that header and is
   rejected with 401 — the browser must not fall back to a weaker path.
-- The values exported are **exactly the values UTL returns**, read from the same
-  `monthly` chart endpoint the History page's Daily tab uses, so an export can
-  never disagree with the on-screen history.
 - A range is served by fetching each calendar month it touches exactly once.
-- A day UTL returns no record for is exported as an **empty** energy cell labelled
-  `No record`, never as `0`. A recorded 0 kWh day is written as `0` and labelled
-  `Recorded (0 kWh)`. Totals count recorded days only.
+- A day the selected source has no record for is exported as an **empty** energy
+  cell labelled `No record`, never as `0`. A recorded 0 kWh day is written as `0`
+  and labelled `Recorded (0 kWh)`. Totals count recorded days only.
+- When any row carries provenance, CSV/XLSX gain `Source` and `Manual Override`
+  columns and PDF gains matching cells, so operator-entered
+  (`source = 'manual_override'`) days stay identifiable after export.
 - Dates cross the wire as plain `YYYY-MM-DD` / `YYYY-MM` strings and are resolved
   against the plant's `Asia/Kolkata` calendar; no UTC conversion is applied to a
   user-selected day.
+- A range wider than `MAX_RANGE_DAYS` (400, shared with `routes/charts.js`) is
+  rejected with 400; the frontend mirrors the limit so the user is told before
+  the request is made, and the server re-validates.
 - `GET /api/export/csv` and `GET /api/export/excel` remain as thin aliases that
   delegate to the same handler, defaulting to the current calendar month.
-- Archive-source history keeps its existing in-memory client-side CSV export: the
-  server export is UTL production data and must not silently become archive data.
+- Responses are `Cache-Control: no-store` snapshots.
 
 ---
 
@@ -562,6 +607,37 @@ Rules:
   during reconciliation passes. Audit information for those writes is kept in
   the separate `manual_archive_log` table rather than inside the archive row.
 
+Canonical archive read rules (`backend/services/archiveService.js`):
+
+- **Exactly one value per day.** `canonicalGeneration(row)` is the single source
+  of truth for a day's kWh, with this precedence:
+  1. `check_monthly_value` — the UTL monthly day-row scalar (authoritative);
+  2. `raw_generation_value`, only when `raw_unit === "kWh_monthly_row"`;
+  3. `generation_kwh` — fallback only. This column holds trapezoid-integrated
+     values for legacy rows (e.g. 21/22 Aug 2026), so it is never read directly.
+     Resolved values round to 2 decimals.
+- **`getDailyRecords()` stays RAW.** It feeds the collector, the notification
+  monitor and the weather backfill, which need stored values as written.
+  Canonicalisation is applied when serving/summarising (`withCanonicalGeneration`
+  in `routes/archive.js`, or the canonical service readers) — rows themselves are
+  never mutated to "fix" history.
+- **Canonical readers to reuse**: `getRangeSummary()`, `getDailyRows()`,
+  `canonicalRange()`, `getMonthlyTotal()`, `getYearlyTotal()`,
+  `getLifetimeTotal()`, `getArchiveSummary()`, `getYearAnalytics()`. New
+  archive aggregates must reuse these rather than adding a second SQL `SUM`.
+- **Missing days are never fabricated.** Absent dates are excluded from totals and
+  reported instead: `daysReported` / `expectedDays` / `missingDays` / `coverage`
+  / `firstDay`-`lastDay`. A partial total must never be presented as a complete
+  lifetime, year or month figure.
+- **Provenance is preserved.** `getDailyRows()` returns `source` and
+  `isManualOverride` alongside `kwh`; `routes/archive.js` passes every other raw
+  row field through unchanged, so the response shape stays stable for existing
+  clients.
+- **IST is the only calendar.** `istDateString()` / `IST_FORMATTER` is the single
+  source of truth for calendar math; `offsetIstDate()`/`istDayOffset()` use
+  UTC-midnight arithmetic for day offsets. Never derive a plant-local day with
+  `toISOString().slice(0, 10)` (§3).
+
 Planned:
 
 - Migrating maintenance storage from JSON to SQLite for transactional integrity.
@@ -578,9 +654,9 @@ All under `/api`, JSON over HTTPS. Data routes require `Authorization: Bearer`.
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, session status |
 | Plant | `GET /api/plant`, `GET /api/config` |
 | Live data | `GET /api/charts/daily|monthly|yearly|total`, `GET /api/inverter` |
-| Archive | `GET /api/archive/status|daily|monthly|yearly|total`, `GET /api/archive/summary` |
+| Archive | `GET /api/archive/status|daily|monthly|yearly|total`, `GET /api/archive/summary`, `GET /api/archive/analytics?year=YYYY` — canonical generation plus coverage (`days_reported`, `first_day`/`last_day`, `missingDays`) |
 | Archive (write) | `POST /api/archive/manual` — Manual Archive Entry; authenticated session **and** master password |
-| Exports | `GET /api/export?format=csv\|xlsx\|pdf&scope=date\|range\|month\|year` — authenticated production history from UTL |
+| Exports | `GET /api/export?format=csv\|xlsx\|pdf&scope=date\|range\|month\|year&source=utl\|archive` — authenticated production history from either source, with per-row provenance for archive rows |
 | Prediction | `GET /api/prediction/...` (next-day energy, performance score) |
 | Maintenance | CRUD under `/api/maintenance` |
 | Notifications | `GET /api/notifications/status`, `GET /api/notifications/vapid-public`, `POST /api/notifications/subscribe`, `POST /api/notifications/unsubscribe` |

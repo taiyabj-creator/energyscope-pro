@@ -19,13 +19,14 @@ function recordLabel(row) {
  * Header block shared by all three formats so a user can always tell WHICH
  * period a file covers and WHEN it was produced.
  */
-function buildMeta({ resolved, summary, generatedOn, plant, dataSource }) {
+function buildMeta({ resolved, summary, generatedOn, plant, dataSource, source }) {
   return {
     plantName: plant.name,
     plantLocation: plant.location,
     periodLabel: resolved.label,
     generatedOn,
     dataSource: dataSource || "UTL Production Data",
+    source: source === "archive" ? "archive" : "utl",
     summary,
   };
 }
@@ -42,7 +43,7 @@ function buildMeta({ resolved, summary, generatedOn, plant, dataSource }) {
 function generateHistoryCsv({ rows, meta }) {
   const lines = [];
 
-  lines.push(["UTL Solar Export"]);
+  lines.push([meta.source === "archive" ? "Archive Export" : "UTL Solar Export"]);
   lines.push([]);
   lines.push(["Plant", meta.plantName]);
   lines.push(["Selected period", meta.periodLabel]);
@@ -254,7 +255,7 @@ function generateHistoryPdf({ rows, meta }) {
         .fontSize(9)
         .fillColor(MUTED)
         .text(
-          'Dates shown as "No record" were returned by UTL without a production record. They are not zero-generation days and are excluded from the total above.',
+          'Dates shown as "No record" have no production record in the selected data source. They are not zero-generation days and are excluded from the total above.',
           left,
           doc.y,
           { width: contentWidth },

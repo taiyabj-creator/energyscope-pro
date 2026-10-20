@@ -112,6 +112,7 @@ async function handleExportRequest(req, res, fallbacks = {}) {
         generatedOn: generatedOnLabel(),
         plant: plantMeta(),
         dataSource: dataSourceLabel,
+        source,
       }),
     });
 

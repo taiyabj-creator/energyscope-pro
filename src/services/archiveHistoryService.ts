@@ -13,6 +13,7 @@
  */
 import { apiRequest } from "@/api/client";
 import type {
+  AnalyticsData,
   ArchiveEnergySummary,
   DailyHistoryRow,
   MonthlyHistoryRow,
@@ -116,7 +117,7 @@ export async function fetchArchiveYears(): Promise<YearlyHistoryRow[]> {
   );
 }
 
-/** Single lifetime aggregate over all archived daily records. */
+/** Single lifetime aggregate over all archived daily records, for the History totals table. */
 export async function fetchArchiveTotal(): Promise<YearlyHistoryRow[]> {
   const totals = await getArchiveData<{
     generation_kwh: number;
@@ -131,6 +132,22 @@ export async function fetchArchiveTotal(): Promise<YearlyHistoryRow[]> {
     totals.first_day && totals.last_day ? `${totals.first_day} – ${totals.last_day}` : "Lifetime";
 
   return [{ year: period, generation: Number(totals.generation_kwh) }];
+}
+
+/** Canonical, archive-backed analytics for one calendar year (heatmap, trend, summary). */
+export async function fetchArchiveAnalytics(year: number): Promise<AnalyticsData> {
+  const data = await getArchiveData<AnalyticsData>(`/api/archive/analytics?year=${year}`);
+
+  return (
+    data ?? {
+      summary: null,
+      monthlyTrend: [],
+      heatmap: [],
+      currentMonthAverage: null,
+      daysReported: 0,
+      coverage: { firstDate: null, latestDate: null },
+    }
+  );
 }
 
 const EMPTY_SUMMARY: ArchiveEnergySummary = {

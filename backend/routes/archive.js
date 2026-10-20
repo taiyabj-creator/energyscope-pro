@@ -4,6 +4,7 @@ const rateLimit = require("express-rate-limit");
 const router = express.Router();
 const archiveService = require("../services/archiveService");
 const masterPassword = require("../services/masterPasswordService");
+const plantConfig = require("../config/plant.json");
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -37,6 +38,21 @@ function isValidIsoDate(s) {
 
 function badRequest(res, message) {
   return res.status(400).json({ success: false, message });
+}
+
+/**
+ * Serves the archive's CANONICAL generation value rather than the raw
+ * generation_kwh column: legacy rows (e.g. 2026-08-21/22) store
+ * trapezoid-integrated values there while the canonical scalar lives in
+ * check_monthly_value / raw_generation_value. Every other row field passes
+ * through unchanged, so the response shape is identical to before.
+ */
+function withCanonicalGeneration(row) {
+  const canonical = archiveService.canonicalGeneration(row);
+  return {
+    ...row,
+    generation_kwh: canonical === null ? null : Number(Number(canonical).toFixed(2)),
+  };
 }
 
 // Operational snapshot - intentionally excludes any database or credential
@@ -82,7 +98,7 @@ router.get("/daily", async (req, res) => {
           message: `No archived record for ${date}.`,
         });
       }
-      return res.json({ success: true, data: rows[0] });
+      return res.json({ success: true, data: withCanonicalGeneration(rows[0]) });
     }
 
     if (!isValidIsoDate(from) || !isValidIsoDate(to) || from > to) {
@@ -98,7 +114,7 @@ router.get("/daily", async (req, res) => {
 
     res.json({
       success: true,
-      data: archiveService.getDailyRecords({ from, to }),
+      data: archiveService.getDailyRecords({ from, to }).map(withCanonicalGeneration),
     });
   } catch (err) {
     console.error("[ARCHIVE] daily error:", err.message);
@@ -165,6 +181,31 @@ router.get("/total", async (req, res) => {
     res.json({ success: true, data: row });
   } catch (err) {
     console.error("[ARCHIVE] total error:", err.message);
+    res.status(500).json({ success: false, message: "Archive unavailable." });
+  }
+});
+
+// Canonical archive-backed analytics for one calendar year (heatmap, monthly
+// trend, best/worst/average daily, specific yield, month-over-month and the
+// current-month daily average). Computed server-side from canonicalGeneration
+// so the Analytics page never re-derives history from a second, competing path.
+router.get("/analytics", async (req, res) => {
+  try {
+    const { year } = req.query;
+
+    if (!ISO_YEAR.test(year || "")) {
+      return badRequest(res, "year must be a valid YYYY value.");
+    }
+
+    res.json({
+      success: true,
+      data: archiveService.getYearAnalytics({
+        year: Number(year),
+        capacityKw: Number(plantConfig.capacity) || 0,
+      }),
+    });
+  } catch (err) {
+    console.error("[ARCHIVE] analytics error:", err.message);
     res.status(500).json({ success: false, message: "Archive unavailable." });
   }
 });

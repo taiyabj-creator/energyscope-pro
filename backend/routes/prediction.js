@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { getExportData, getLast30DaysGeneration } = require("../services/exportService");
+const { getExportData } = require("../services/exportService");
 const { predictForDate } = require("../services/predictionService");
 const { getWeather } = require("../services/weatherService");
 const { buildPerformanceScore } = require("../services/performanceScore");
@@ -72,7 +72,19 @@ router.get("/today", async (req, res) => {
       daysWithoutRain: weather.rainProbability > 70 ? 0 : 5,
     });
 
-    const history = await getLast30DaysGeneration(req.token, req.session, now);
+    // Rank today's measured value against the EnergyScope Archive's canonical
+    // completed days (the same source of truth the History page and the AI use).
+    // Today is EXCLUDED from the baseline; only the last 29 completed IST days
+    // are considered, and days with no archived row simply do not participate.
+    const istDayOffset = (offset) => {
+      const d = new Date(`${nowIst}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + offset);
+      return d.toISOString().slice(0, 10);
+    };
+    const history = archiveService
+      .getDailyRows({ from: istDayOffset(-29), to: istDayOffset(-1) })
+      .filter((row) => row.kwh !== null)
+      .map((row) => ({ date: row.date, generation: row.kwh }));
 
     const comparisonValue = currentEnergy;
 
@@ -86,7 +98,7 @@ router.get("/today", async (req, res) => {
       position,
       totalDays: history.length + 1,
       label: `#${position}`,
-      subtitle: "Compared with the past 30 days",
+      subtitle: "Compared with the last 29 completed days",
     };
 
     res.json({

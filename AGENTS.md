@@ -75,6 +75,38 @@ Rules:
 - `backend/scripts/seed-dev-archive.js` is development-only tooling. Its rows
   are **not** production data and must never be described as such.
 
+## Canonical Archive Data Source
+
+The **EnergyScope Archive** is the source of truth for all **historical** solar
+generation metrics; UTL remains the source for **live/current** values. Full
+detail lives in `ARCHITECTURE.md` ("Historical data flow" and "Canonical archive
+read rules"). Rules to preserve:
+
+- **Dashboard / Analytics / History (archive tab) / Solar Assistant must not
+  disagree.** Compute historical metrics through the shared canonical helpers in
+  `backend/services/archiveService.js` — `canonicalGeneration`,
+  `getRangeSummary`, `getDailyRows`, `getYearAnalytics`, `getArchiveSummary`,
+  `getLifetimeTotal` — never with a new raw SQL `SUM` over
+  `solar_generation_daily`. `getDailyRecords` stays **raw** for the collector,
+  notification monitor and weather backfill.
+- **Canonical precedence is fixed:** `check_monthly_value` →
+  `raw_generation_value` (only when `raw_unit === "kWh_monthly_row"`) →
+  `generation_kwh`. Never read the raw column directly; legacy rows hold
+  trapezoid-integrated values there.
+- **Keep live/UTL paths live.** Dashboard "Today", the History "UTL Live" tab,
+  current AC power, and the prediction/assistant **forecast inputs** stay on UTL
+  completed-day data. Never replace a live reading with an archive value.
+- **Never fabricate zero-generation days.** Exclude absent dates and surface
+  coverage (`daysReported` / `expectedDays` / `missingDays` / `firstDay`-`lastDay`).
+  A partial total must never be presented as a complete lifetime, year or month
+  figure.
+- **Preserve manual `manual_override` rows, provenance and production data.**
+  Operator entries, `source`/`isManualOverride` metadata and the audit log are
+  never overwritten, deleted, or "repaired" from collected values.
+- **Keep the change set scoped** to the archive-consistency work and verify with
+  `npx tsc --noEmit`, `npm run lint`, `npm run build` (plus a backend smoke
+  start).
+
 ## Current-Day Generation
 
 "Today's generation" means generation for the **current Asia/Kolkata (IST)
@@ -124,7 +156,7 @@ Oracle Cloud Infrastructure hosting, PM2 process management, nginx, HTTPS on a
 custom domain (domain/infrastructure details are private and must not appear in
 code or documentation).
 
-Current release: **v1.2.0** (unreleased on `main`; the previous tag is v1.1.0 at
+Current release: **v1.2.1** (unreleased on `main`; the previous tag is v1.1.0 at
 commit `3d7c951 — Release v1.1.0`). The backend package version
 (`backend/package.json`) is maintained independently (currently `1.0.0`) — do not
 assume it matches the frontend release.

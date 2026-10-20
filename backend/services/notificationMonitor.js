@@ -160,8 +160,10 @@ async function fetchMonthlyChart(summaryDate, session, deps = {}) {
  */
 function computeRank(todayKwh, archivedRows) {
   if (!Number.isFinite(todayKwh)) return null;
+  // Rows come from getDailyRows(), so `kwh` is the canonical value (null for an
+  // unusable legacy row, which must not count as a zero day).
   const others = (archivedRows || [])
-    .map((r) => Number(r.generation_kwh))
+    .map((r) => (r && r.kwh != null ? Number(r.kwh) : NaN))
     .filter((v) => Number.isFinite(v));
   if (others.length + 1 < 2) return null;
   return 1 + others.filter((v) => v > todayKwh + 1e-9).length;
@@ -458,9 +460,7 @@ function createMonitor(overrides = {}) {
 
     log(`Summary generated for ${summaryDate}: ${figures.kwh.toFixed(2)} kWh.`);
 
-    const archivedRows = deps.archive
-      .getDailyRecords({})
-      .filter((r) => r.generation_date !== summaryDate);
+    const archivedRows = deps.archive.getDailyRows({}).filter((r) => r.date !== summaryDate);
     const rank = computeRank(figures.kwh, archivedRows);
 
     // Claim FIRST (idempotency), then send. A crash between claim and send
@@ -563,9 +563,7 @@ async function buildDailySummaryPayload(summaryDate, options = {}) {
   const figures = await monitor._internals.buildDailyFigures(resolvedDate, session);
   if (!figures) return null;
 
-  const archivedRows = deps.archive
-    .getDailyRecords({})
-    .filter((r) => r.generation_date !== resolvedDate);
+  const archivedRows = deps.archive.getDailyRows({}).filter((r) => r.date !== resolvedDate);
   const rank = computeRank(figures.kwh, archivedRows);
 
   return {

@@ -66,10 +66,12 @@ function DashboardPage() {
 
   // Per-card source toggle between UTL and the canonical Archive. Session-only
   // (component state): each of the three Energy Summary cards toggles
-  // independently and resets on reload by design.
+  // independently and resets on reload by design. Month/year default to the
+  // Archive (the canonical historical source); today defaults to UTL because it
+  // is genuinely live/current-day data.
   const [todaySource, setTodaySource] = useState<DataSource>("utl");
-  const [monthSource, setMonthSource] = useState<DataSource>("utl");
-  const [yearSource, setYearSource] = useState<DataSource>("utl");
+  const [monthSource, setMonthSource] = useState<DataSource>("archive");
+  const [yearSource, setYearSource] = useState<DataSource>("archive");
 
   const archiveEnabled =
     todaySource === "archive" || monthSource === "archive" || yearSource === "archive";
@@ -388,10 +390,17 @@ function DashboardPage() {
         />
         <MetricCard
           title="Lifetime generation"
-          value={formatLifetimeEnergy(totals?.total ?? 0).value}
-          unit={formatLifetimeEnergy(totals?.total ?? 0).unit}
+          value={totals?.total != null ? formatLifetimeEnergy(totals.total).value : "—"}
+          unit={totals?.total != null ? formatLifetimeEnergy(totals.total).unit : undefined}
           icon={Leaf}
-          footnote={`Since ${plant ? new Date(plant.installationDate).getFullYear() : "—"}`}
+          footnote={
+            totals?.total != null
+              ? "UTL Solar RMS · cumulative inverter output"
+              : totals
+                ? "Lifetime value unavailable from UTL"
+                : "Loading…"
+          }
+          loading={!totals}
           delay={0.4}
         />
         <MetricCard
@@ -482,7 +491,10 @@ function DashboardPage() {
         <span className="inline-flex items-center gap-2">
           <Activity className="size-3.5" /> Values refresh every 60 seconds
         </span>
-        <span>Measurements and generation are supplied by the UTL backend.</span>
+        <span>
+          Live power and today's generation are supplied by the UTL backend; historical totals come
+          from the EnergyScope Archive.
+        </span>
       </Panel>
     </motion.div>
   );

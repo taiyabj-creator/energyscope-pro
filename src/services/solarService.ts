@@ -1,8 +1,7 @@
 /** UTL-backed service layer. */
 import { apiRequest } from "@/api/client";
 import type {
-  AnalyticsData,
-  AnalyticsSummary,
+  BackendHealth,
   DailyHistoryRow,
   EnergyRange,
   EnergyTotals,
@@ -67,6 +66,15 @@ async function fetchChart(endpoint: string): Promise<ChartResponse> {
   return apiRequest<ChartResponse>(endpoint);
 }
 
+/**
+ * Application version reported by the backend's unauthenticated health
+ * endpoint. The diagnostics page uses it so its "Backend version" row reflects
+ * the running backend rather than a hardcoded value.
+ */
+export async function fetchBackendHealth(): Promise<BackendHealth> {
+  return apiRequest<BackendHealth>("/api/health");
+}
+
 function getLoggerStatus(inverter: UtlInverter): "online" | "offline" | "warning" {
   switch (String(inverter.logger_status)) {
     case "1":
@@ -103,6 +111,17 @@ function sumPvProductionKwh(results: unknown, source: Exclude<EnergySource, "dai
 
 function chartValue(point: ChartPoint, source: EnergySource): number {
   return normalizeEnergyUnit(point.PvProduction, source);
+}
+
+/**
+ * UTL's InverterDevice `daily_energy_produced` is a cumulative kWh counter
+ * (all-time output), not a daily figure. Returns it as kWh, or null when the
+ * upstream value is missing/invalid/empty so callers never show a false 0.
+ */
+function utlLifetimeKwh(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 /**
@@ -184,9 +203,13 @@ export async function fetchEnergyTotals(): Promise<EnergyTotals> {
     // The yearly endpoint returns one kWh value per month; sum it directly.
     year: sumPvProductionKwh(yearChart.results ?? [], "yearly"),
 
-    // InverterDevice's cumulative counter is the only lifetime value exposed by UTL.
-    // /charts/total is a historical chart series, not a plant lifetime total.
-    total: Number(inverter.daily_energy_produced),
+    // Lifetime generation: the inverter's cumulative energy counter. Verified
+    // live against utlsolarrms.com/api/InverterDevice (2026-10-18) it read
+    // 1636 kWh, greater than the whole 2026 year, i.e. a true all-time total.
+    // /charts/total is only a per-year series, not a lifetime scalar. null when
+    // UTL returns nothing usable — never replaced with an archive total or the
+    // daily counter.
+    total: utlLifetimeKwh(inverter.daily_energy_produced),
 
     // Historical comparisons use real UTL chart rows. null means the period has
     // no recorded data and must not be presented as an actual 0% change.
@@ -369,79 +392,6 @@ export async function fetchYearlyHistory(): Promise<YearlyHistoryRow[]> {
   }));
 }
 
-export async function fetchAnalyticsData(year = new Date().getFullYear()): Promise<AnalyticsData> {
-  const [plant, yearly, ...monthlyResponses] = await Promise.all([
-    fetchPlantInfo(),
-    fetchChart(`/api/charts/yearly?year=${year}`),
-    ...Array.from({ length: 12 }, (_, month) =>
-      fetchChart(`/api/charts/monthly?month=${year}-${String(month + 1).padStart(2, "0")}`),
-    ),
-  ]);
-
-  const dailyRows = monthlyResponses.flatMap((response, monthIndex) =>
-    (response.results ?? []).flatMap((point) => {
-      const date = chartDate(point.date, year, monthIndex);
-      return date ? [{ point, date }] : [];
-    }),
-  );
-  const heatmap = dailyRows.map(({ point, date }) => ({
-    month: MONTHS[Number(date.slice(5, 7)) - 1]!,
-    day: Number(date.slice(8, 10)),
-    value: chartValue(point, "monthly"),
-  }));
-  const usableDays = dailyRows.filter(({ point }) => chartValue(point, "monthly") > 0);
-  const monthlyTrend = (yearly.results ?? []).map((point) => ({
-    label: String(point.month),
-    value: chartValue(point, "yearly"),
-  }));
-  const yearProduction = monthlyTrend.reduce((total, point) => total + point.value, 0);
-  const values = monthlyTrend.map((point) => point.value).filter((value) => value > 0);
-  const monthOverMonthPct =
-    values.length > 1 ? ((values.at(-1)! - values.at(-2)!) / values.at(-2)!) * 100 : 0;
-
-  const best = usableDays.reduce<(typeof usableDays)[number] | null>(
-    (current, row) =>
-      !current || chartValue(row.point, "monthly") > chartValue(current.point, "monthly")
-        ? row
-        : current,
-    null,
-  );
-  const worst = usableDays.reduce<(typeof usableDays)[number] | null>(
-    (current, row) =>
-      !current || chartValue(row.point, "monthly") < chartValue(current.point, "monthly")
-        ? row
-        : current,
-    null,
-  );
-
-  const summary: AnalyticsSummary | null =
-    best && worst
-      ? {
-          bestDay: { date: best.date, generation: chartValue(best.point, "monthly") },
-          worstDay: { date: worst.date, generation: chartValue(worst.point, "monthly") },
-          averageDaily:
-            usableDays.reduce((total, row) => total + chartValue(row.point, "monthly"), 0) /
-            usableDays.length,
-          specificYield: plant.capacityKw > 0 ? yearProduction / plant.capacityKw : 0,
-          performanceRatio: null,
-          monthOverMonthPct,
-        }
-      : null;
-
-  const currentMonth = monthlyResponses[new Date().getMonth()]?.results ?? [];
-  const currentMonthAverage = currentMonth.length
-    ? currentMonth.reduce((total, point) => total + chartValue(point, "monthly"), 0) /
-      currentMonth.length
-    : null;
-
-  return { summary, monthlyTrend, heatmap, currentMonthAverage };
-}
-
-/**
- * The current UTL backend has no weather endpoint. Returning `null` keeps the
- * interface ready for a future backend integration without presenting mock
- * forecasts or irradiance as plant data.
- */
 export async function fetchWeather(latitude: number, longitude: number): Promise<WeatherData> {
   try {
     const query = new URLSearchParams({

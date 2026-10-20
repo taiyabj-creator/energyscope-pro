@@ -13,7 +13,14 @@ export interface EnergyTotals {
   today: number;
   month: number;
   year: number;
-  total: number;
+  /**
+   * Lifetime/cumulative generation in kWh, read from the UTL inverter's energy
+   * counter (`daily_energy_produced` on GET /api/inverter — despite the name it
+   * is the all-time cumulative output, verified against the live UTL API).
+   * null when UTL returns nothing usable; it is never substituted with an
+   * archive total or the inverter's daily counter.
+   */
+  total: number | null;
   /**
    * kWh for the same period one cycle earlier — used for trend indicators.
    * null means no historical data exists for that period.
@@ -139,7 +146,13 @@ export interface AnalyticsSummary {
   averageDaily: number;
   specificYield: number;
   performanceRatio: null;
-  monthOverMonthPct: number;
+  /**
+   * Percentage change from the latest COMPLETED calendar month to the one
+   * immediately before it. null when the comparison is not computable (e.g. the
+   * two latest months are not consecutive, or there is only one recorded month)
+   * — never a misleading 0.
+   */
+  monthOverMonthPct: number | null;
 }
 
 export interface AnalyticsData {
@@ -147,6 +160,10 @@ export interface AnalyticsData {
   monthlyTrend: SeriesPoint[];
   heatmap: HeatmapCell[];
   currentMonthAverage: number | null;
+  /** Canonical recorded days contributing to this year's analytics. */
+  daysReported: number;
+  /** Archive coverage for the selected year (null bounds when empty). */
+  coverage: { firstDate: string | null; latestDate: string | null };
 }
 
 export interface WeatherNow {
@@ -230,4 +247,16 @@ export interface NotificationItem {
   time: string;
   unread: boolean;
   url?: string | null;
+}
+
+/**
+ * Unauthenticated backend health payload (`GET /api/health`). `version` is the
+ * application version mirrored from package.json, so the diagnostics page can
+ * report the running backend instead of a hardcoded label.
+ */
+export interface BackendHealth {
+  status: string;
+  uptime: number;
+  timestamp: string;
+  version: string;
 }

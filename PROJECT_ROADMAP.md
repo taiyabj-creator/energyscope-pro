@@ -1,7 +1,7 @@
 # EnergyScope Development Roadmap
 
 > Status: Active Development
-> Current release: **v1.2.0** (unreleased on `main`; previous tag v1.1.0 at
+> Current release: **v1.2.1** (unreleased on `main`; previous tag v1.1.0 at
 > commit `3d7c951 — Release v1.1.0`)
 >
 > This roadmap reflects the CURRENT state of the repository. Items are labelled
@@ -11,6 +11,70 @@
 ---
 
 ## Current Release
+
+**v1.2.1** — the EnergyScope Archive is now the canonical source of truth for
+historical production metrics, while UTL remains the source for live and
+current-day values. Unreleased on `main`; not yet deployed to production.
+
+### Changed
+
+- **One canonical historical value per day.** Aggregates and views resolve a
+  day's kWh through `canonicalGeneration()` — `check_monthly_value` →
+  `raw_generation_value` (when `raw_unit` is `kWh_monthly_row`) →
+  `generation_kwh` — so the Dashboard, Analytics, History and the AI assistant
+  can no longer disagree about a period. Legacy rows that stored
+  trapezoid-integrated values in `generation_kwh` (e.g. 21/22 Aug 2026) now
+  report the authoritative scalar; the Aug 2026 monthly total moves from
+  456.54 to 454.81 kWh.
+- **Archive-backed analytics endpoint.** `GET /api/archive/analytics?year=YYYY`
+  returns heatmap, monthly trend, best/worst/average day, specific yield,
+  current-month average and month-over-month (latest two consecutive completed
+  months, else `null`). The Analytics page now reads it instead of deriving
+  history client-side.
+- **Canonical archive aggregate and summary endpoints.** `GET /api/archive/total`
+  returns the archive's total with coverage (`days_reported`, `first_day`,
+  `last_day`) — used by the History "Total" row; `GET /api/archive/summary` powers
+  the Dashboard archive cards (today / month / year plus previous-period trends)
+  from the same rule.
+- **Coverage is always disclosed.** Aggregates expose `daysReported`,
+  `expectedDays`, `missingDays` and first/last day; the Dashboard, Energy,
+  History, Profile and Devices views show a coverage footnote on archive-backed
+  totals when a total is partial. Missing days are never zero-filled and a
+  partial total is never presented as a complete lifetime figure.
+- **Lifetime generation uses the UTL inverter's cumulative counter.** The
+  Dashboard, Energy, Profile and Devices "Lifetime generation" metrics read the
+  UTL `InverterDevice.daily_energy_produced` counter (kWh, verified live), not
+  the archive total; the archive remains the source for month/year and History
+  totals.
+- **Export supports both data sources.** `GET /api/export` accepts
+  `source=utl|archive` with `format=csv|xlsx|pdf` and
+  `scope=date|range|month|year`; the shared dialog offers a data-source choice
+  and pre-selects the History page's active tab, and labels the file **UTL
+  Production Data** or **Archive Data**. Archive exports carry per-row
+  provenance (`Source`, `Manual Override`).
+- **AI assistant context is archive-backed** for month/recent-day figures and is
+  labelled in the prompt as canonical archived UTL readings (`geminiService.js`).
+
+### Preserved
+
+- Live inverter/plant readings stay live from UTL; the History **UTL Live** view
+  still shows exactly what UTL returns.
+- Dashboard **Today** keeps UTL as its source, with the v1.2.0 current-day IST
+  rules unchanged.
+- Prediction and assistant **forecast inputs** remain on the UTL completed-day
+  baseline, so dashboard and AI predictions stay identical.
+- Existing API response shapes are unchanged — canonicalisation replaces values
+  inside the same shape.
+- `manual_override` rows keep their authority and provenance; the collector still
+  never overwrites them.
+
+Documentation: `ARCHITECTURE.md` (Historical data flow, canonical archive read
+rules, export flow, API list) and `AGENTS.md` were updated to match the
+implemented architecture.
+
+---
+
+## Previous Release
 
 **v1.2.0** — EnergyScope Pro is a deployed, production PWA for monitoring UTL
 Solar inverters.
@@ -57,7 +121,7 @@ deployed.
 
 ---
 
-## Previous Release
+## Earlier Release
 
 **v1.1.0** — EnergyScope Pro is a deployed, production PWA for monitoring UTL
 Solar inverters.

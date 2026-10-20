@@ -118,8 +118,6 @@ export function ProductionExportDialog({
     if (!open) return;
 
     setStep("scope");
-    const location = typeof window !== "undefined" ? window.location.pathname : "";
-    const isArchiveView = location.includes("/history") && true; // history route; check if archive source selected? but dialog opened from history; history component knows isArchive - but dialog is shared
     setSelection({
       ...defaultSelection(),
       ...(initialScope ? { scope: initialScope } : {}),
@@ -140,6 +138,7 @@ export function ProductionExportDialog({
 
   const period = describeExportPeriod(selection);
   const busy = pending !== null;
+  const dataSourceLabel = selection.source === "archive" ? "Archive Data" : "UTL Production Data";
 
   const close = () => {
     if (busy) return;
@@ -351,7 +350,7 @@ export function ProductionExportDialog({
 
             <div className="grid gap-1 rounded-lg border border-border bg-surface-2/60 p-3">
               <p className="text-xs text-muted-foreground">Data source</p>
-              <p className="text-sm">UTL Production Data</p>
+              <p className="text-sm">{dataSourceLabel}</p>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -366,7 +365,7 @@ export function ProductionExportDialog({
                   : "—"}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Includes every day in the selected period. Days without a UTL record are marked as
+                Includes every day in the selected period. Days without a record are marked as
                 &ldquo;No record&rdquo; rather than zero.
               </p>
             </div>

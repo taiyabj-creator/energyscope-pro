@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Cpu, Radio, Signal, Wifi } from "lucide-react";
 import { Chip, Panel, PanelHeading, StatusDot } from "@/components/ui/primitives";
 import { useEnergyTotals, useInverter, useLogger, usePlantInfo } from "@/hooks/useSolarData";
-import { formatDate, formatEnergy } from "@/utils/format";
+import { formatDate, formatEnergy, formatLifetimeEnergy } from "@/utils/format";
 import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
 
 export const Route = createFileRoute("/devices")({
@@ -105,10 +105,11 @@ function DevicesPage() {
             <Item
               label="Lifetime generation"
               value={
-                totals
-                  ? `${formatEnergy(totals.total).value} ${formatEnergy(totals.total).unit}`
+                totals?.total != null
+                  ? `${formatLifetimeEnergy(totals.total).value} ${formatLifetimeEnergy(totals.total).unit}`
                   : "—"
               }
+              note={totals?.total != null ? "UTL Solar RMS cumulative inverter counter" : undefined}
             />
             <Item label="AC voltage" value={`${inverter?.acVoltage.toFixed(1) ?? "—"} V`} />
             <Item label="AC frequency" value={`${inverter?.acFrequency.toFixed(2) ?? "—"} Hz`} />
@@ -170,7 +171,17 @@ function DevicesPage() {
   );
 }
 
-function Item({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof Wifi }) {
+function Item({
+  label,
+  value,
+  icon: Icon,
+  note,
+}: {
+  label: string;
+  value: string;
+  icon?: typeof Wifi;
+  note?: string | undefined;
+}) {
   const v = (value ?? "").toString().trim();
   const isUnavailable =
     v.length === 0 ||
@@ -190,6 +201,7 @@ function Item({ label, value, icon: Icon }: { label: string; value: string; icon
         {label}
       </dt>
       <dd className="num mt-1 truncate text-sm font-semibold">{value}</dd>
+      {note ? <p className="mt-0.5 text-[11px] text-muted-foreground">{note}</p> : null}
     </div>
   );
 }

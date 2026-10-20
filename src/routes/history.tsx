@@ -73,9 +73,9 @@ function HistoryPage() {
       localStorage.setItem("history-source", source);
     }
   }, [source]);
-  const utlDaily = useDailyHistory(selectedDate);
-  const utlMonthly = useMonthlyHistory(selectedDate.getFullYear());
-  const utlYearly = useYearlyHistory();
+  const utlDaily = useDailyHistory(selectedDate, !isArchive);
+  const utlMonthly = useMonthlyHistory(selectedDate.getFullYear(), !isArchive);
+  const utlYearly = useYearlyHistory(!isArchive);
   const archiveDaily = useArchiveDailyHistory(selectedDate, isArchive);
   const archiveMonthly = useArchiveMonthlyHistory(selectedDate.getFullYear(), isArchive);
   const archiveYearly = useArchiveYearlyHistory(isArchive);
@@ -118,9 +118,10 @@ function HistoryPage() {
   useEffect(() => setPage(1), [tab, selectedDate, search]);
 
   /**
-   * Archive rows are already in memory, so that source keeps exporting exactly
-   * what is on screen. UTL rows go through the shared export dialog instead, so
-   * Settings and History produce identical, server-generated files.
+   * Both sources open the shared ProductionExportDialog. The dialog reads the
+   * active tab from localStorage ("history-source") to pre-select the matching
+   * data source, and scopes the period to the current tab, so Settings and
+   * History produce identical server-generated files.
    */
   const handleExportClick = () => {
     setExportOpen(true);

@@ -32,22 +32,26 @@ function AnalyticsPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Average daily yield"
-          value={summary ? summary.averageDaily.toFixed(2) : "�?"}
+          value={summary ? summary.averageDaily.toFixed(2) : "—"}
           unit="kWh"
           icon={LineChartIcon}
           tone="solar"
-          footnote={`${year} recorded days`}
+          footnote={
+            data
+              ? `${data.daysReported} recorded day${data.daysReported === 1 ? "" : "s"} in ${year}`
+              : "EnergyScope Archive"
+          }
         />
         <MetricCard
           title="Specific yield"
-          value={summary ? summary.specificYield.toFixed(2) : "�?"}
+          value={summary ? summary.specificYield.toFixed(2) : "—"}
           unit="kWh/kWp"
           icon={Gauge}
           footnote="Year-to-date production / installed capacity"
         />
         <MetricCard
           title="Best production day"
-          value={summary ? summary.bestDay.generation.toFixed(2) : "�?"}
+          value={summary ? summary.bestDay.generation.toFixed(2) : "—"}
           unit="kWh"
           icon={Award}
           tone="battery"
@@ -55,7 +59,7 @@ function AnalyticsPage() {
         />
         <MetricCard
           title="Worst production day"
-          value={summary ? summary.worstDay.generation.toFixed(2) : "�?"}
+          value={summary ? summary.worstDay.generation.toFixed(2) : "—"}
           unit="kWh"
           icon={CalendarX}
           tone="neutral"
@@ -87,7 +91,7 @@ function AnalyticsPage() {
       <Panel delay={0.1}>
         <PanelHeading
           title="Monthly production trend"
-          subtitle={`UTL yearly chart data for ${year}`}
+          subtitle={`EnergyScope Archive · recorded months of ${year}`}
         />
         <div className="h-[320px]">
           {!data ? (
@@ -137,7 +141,7 @@ function AnalyticsPage() {
         <Panel delay={0.15} className="min-w-0">
           <PanelHeading
             title="Generation heatmap"
-            subtitle="Daily production returned by each monthly UTL chart; missing dates are blank"
+            subtitle="EnergyScope Archive · canonical daily production; missing dates are blank"
           />
           {!data ? (
             <Skeleton className="h-56 w-full" />
@@ -187,12 +191,16 @@ function AnalyticsPage() {
         <Panel delay={0.2}>
           <PanelHeading
             title="Performance comparison"
-            subtitle="Calculated only where UTL history supports it"
+            subtitle="Calculated from the EnergyScope Archive"
           />
           <div className="space-y-3">
             <Insight
               title="Month over month"
-              value={summary ? `${summary.monthOverMonthPct.toFixed(1)}%` : "Not available"}
+              value={
+                summary && summary.monthOverMonthPct !== null
+                  ? `${summary.monthOverMonthPct.toFixed(1)}%`
+                  : "Not available"
+              }
             />
             <Insight
               title="Current month daily average"
@@ -212,7 +220,7 @@ function AnalyticsPage() {
 function Insight({
   title,
   value,
-  detail = "Calculated from UTL chart data.",
+  detail = "Calculated from the EnergyScope Archive.",
 }: {
   title: string;
   value: string;

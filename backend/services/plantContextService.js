@@ -5,7 +5,8 @@
  * and hands it to geminiService as a server-generated appendix. This module is
  * pure aggregation/composition - it implements NO new calculations:
  *
- *   UTL API (via utlApi/exportService) -> measured generation + live power
+ *   archiveService.js                   -> canonical historical generation (month-to-date, recent days)
+ *   UTL API (via utlApi/exportService) -> today's live generation + live power
  *   weatherService.js                  -> weather (Open-Meteo)
  *   predictionService.js               -> forecast (authoritative, untouched)
  *   performanceScore.js                -> performance score (untouched)
@@ -45,6 +46,13 @@ function istDateString(date = new Date()) {
     month: "2-digit",
     day: "2-digit",
   }).format(date);
+}
+
+/** ISO calendar date `offsetDays` away from an IST date string (UTC-midnight math). */
+function offsetIstDate(istDate, offsetDays) {
+  const d = new Date(`${istDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
 }
 
 function unavailable(reason) {
@@ -118,7 +126,7 @@ function deriveLiveStatus(plantStatus, plantId) {
 async function buildPlantContext({ token, session }) {
   const nowIst = istDateString();
 
-  const [statusRes, inverterRes, exportRes, historyRes, weatherRes] = await Promise.allSettled([
+  const [statusRes, inverterRes, exportRes, weatherRes] = await Promise.allSettled([
     withTimeout(utlApi.getPlantStatus(token, session), SOURCE_TIMEOUT_MS, "plantStatus"),
     withTimeout(getInverterSnapshot(token, session), SOURCE_TIMEOUT_MS, "inverterSnapshot"),
     withTimeout(
@@ -130,11 +138,6 @@ async function buildPlantContext({ token, session }) {
       ),
       SOURCE_TIMEOUT_MS,
       "exportData",
-    ),
-    withTimeout(
-      exportService.getLast30DaysGeneration(token, session, new Date()),
-      SOURCE_TIMEOUT_MS,
-      "last30Days",
     ),
     withTimeout(
       weatherService.getWeather(plantConfig.latitude, plantConfig.longitude),
@@ -170,21 +173,19 @@ async function buildPlantContext({ token, session }) {
       : unavailable(reasonOf(statusRes, "plant status")),
   };
 
-  // --- Today + month (from the same monthly chart /api/prediction reads) ---
+  // --- Today (live/current-day, from the UTL monthly chart) ----------------
+  // Historical month/recent values come from the EnergyScope Archive below;
+  // today's partial generation and live AC power stay on the live UTL source.
   let today = unavailable(reasonOf(exportRes, "generation data"));
-  let month = unavailable(reasonOf(exportRes, "generation data"));
-  let monthlyGeneration = [];
-  let currentMonthBestDay = null;
-  let currentMonthWorstDay = null;
+  // Forecast baseline: completed-day month-to-date average. This is a forecast
+  // INPUT, not a displayed historical metric, so it keeps its documented
+  // UTL/completed-days rule - routes/prediction.js derives the IDENTICAL value
+  // from the same monthly chart, keeping dashboard and AI forecasts equal.
+  let forecastMonthAverage = null;
   const exportData = value(exportRes);
   if (exportData?.monthly?.results) {
     const rows = Array.isArray(exportData.monthly.results) ? exportData.monthly.results : [];
     const todayRow = rows.find((r) => Number(r.date) === Number(nowIst.slice(8, 10)));
-    // Completed days only (date < today) for the month-to-date average, matching
-    // routes/prediction.js so dashboard and AI feed predictDailyEnergy/forecast
-    // the IDENTICAL baseline. Today's partial generation is excluded so it
-    // cannot pull today's forecast toward its own partial value.
-    const mtdRows = rows.filter((r) => Number(r.date) < Number(nowIst.slice(8, 10)));
 
     today = {
       generationKwh: todayRow ? round2(todayRow.PvProduction ?? 0) : null,
@@ -206,15 +207,40 @@ async function buildPlantContext({ token, session }) {
       today.currentPowerKw = unavailable(reasonOf(inverterRes, "live power"));
     }
 
-    const monthKey = `${nowIst.slice(0, 4)}-${nowIst.slice(5, 7)}`;
+    const mtdRows = rows.filter((r) => Number(r.date) < Number(nowIst.slice(8, 10)));
+    forecastMonthAverage =
+      mtdRows.length > 0
+        ? mtdRows.reduce((sum, r) => sum + Number(r.PvProduction ?? 0), 0) / mtdRows.length
+        : null;
+  }
 
-    // Build explicit per-day generation array for the current month.
-    // Only rows actually returned by UTL are included; missing days are
-    // never fabricated or zero-filled.
-    monthlyGeneration = rows.map((r) => ({
-      date: `${monthKey}-${String(r.date).padStart(2, "0")}`,
-      generationKwh: round2(r.PvProduction ?? 0),
-    }));
+  // --- Current month + recent days (EnergyScope Archive, canonical) ---------
+  // One canonical rule everywhere: month total and daily average are computed
+  // over the month's recorded days only (1st .. today IST), matching the
+  // dashboard archive card and /api/archive/analytics. Missing days are never
+  // rounded down to zero and never fabricated.
+  const monthKey = `${nowIst.slice(0, 4)}-${nowIst.slice(5, 7)}`;
+  let month = unavailable("archive has no recorded days for this month yet");
+  let monthlyGeneration = [];
+  let archiveWindow = []; // newest-first canonical completed days (excludes today)
+  let currentMonthBestDay = null;
+  let currentMonthWorstDay = null;
+
+  try {
+    const monthSummary = archiveService.getRangeSummary({ from: `${monthKey}-01`, to: nowIst });
+    monthlyGeneration = archiveService
+      .getDailyRows({ from: `${monthKey}-01`, to: nowIst })
+      .filter((row) => row.kwh !== null)
+      .map((row) => ({ date: row.date, generationKwh: row.kwh }));
+
+    if (monthSummary) {
+      month = {
+        key: monthKey,
+        monthToDateKwh: monthSummary.totalKwh,
+        daysRecorded: monthSummary.daysReported,
+        dailyAverageKwh: monthSummary.dailyAverageKwh,
+      };
+    }
 
     if (monthlyGeneration.length > 0) {
       const best = monthlyGeneration.reduce((a, b) => (b.generationKwh > a.generationKwh ? b : a));
@@ -222,38 +248,44 @@ async function buildPlantContext({ token, session }) {
       currentMonthBestDay = { date: best.date, generationKwh: best.generationKwh };
       currentMonthWorstDay = { date: worst.date, generationKwh: worst.generationKwh };
     }
-
-    if (mtdRows.length > 0) {
-      const mtdTotal = mtdRows.reduce((sum, r) => sum + Number(r.PvProduction ?? 0), 0);
-      month = {
-        key: monthKey,
-        monthToDateKwh: round2(mtdTotal),
-        daysRecorded: mtdRows.length,
-        dailyAverageKwh: mtdTotal / mtdRows.length,
-      };
-    } else {
-      month = unavailable("monthly chart has no rows for this month yet");
-    }
+  } catch (err) {
+    month = unavailable(`archive read failed: ${String(err.message).slice(0, 120)}`);
   }
 
-  // --- Last-30-days summary --------------------------------------------------
-  let recentHistory = unavailable(reasonOf(historyRes, "history"));
-  const history = value(historyRes);
-  if (Array.isArray(history) && history.length > 0) {
-    const generations = history.map((d) => d.generation);
-    const best = history.reduce((a, b) => (b.generation > a.generation ? b : a));
-    const worst = history.reduce((a, b) => (b.generation < a.generation ? b : a));
-    const last7 = history.slice(-7);
-    recentHistory = {
-      windowDays: history.length,
-      totalKwh: round2(generations.reduce((s, g) => s + g, 0)),
-      averageKwh: round2(generations.reduce((s, g) => s + g, 0) / generations.length),
-      bestDay: { date: best.date, kwh: round2(best.generation) },
-      worstDay: { date: worst.date, kwh: round2(worst.generation) },
-      last7DaysAverageKwh: round2(last7.reduce((s, d) => s + d.generation, 0) / last7.length),
-      yesterdayKwh: round2(history[0].generation),
-      yesterdayDate: history[0].date,
-    };
+  // --- Recent completed days (EnergyScope Archive, canonical) ---------------
+  let recentHistory = unavailable("archive has no completed days in the last 29-day window");
+  const windowFrom = offsetIstDate(nowIst, -29);
+  const windowTo = offsetIstDate(nowIst, -1);
+  try {
+    archiveWindow = archiveService
+      .getDailyRows({ from: windowFrom, to: windowTo })
+      .filter((row) => row.kwh !== null)
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    if (archiveWindow.length > 0) {
+      const generations = archiveWindow.map((row) => row.kwh);
+      const total = generations.reduce((sum, value) => sum + value, 0);
+      const newest = archiveWindow.slice(0, 7);
+      const best = archiveWindow.reduce((a, b) => (b.kwh > a.kwh ? b : a));
+      const worst = archiveWindow.reduce((a, b) => (b.kwh < a.kwh ? b : a));
+      const yesterdayDate = offsetIstDate(nowIst, -1);
+      const yesterdayRow = archiveWindow.find((row) => row.date === yesterdayDate) || null;
+
+      recentHistory = {
+        windowDays: archiveWindow.length,
+        windowFrom,
+        windowTo,
+        totalKwh: round2(total),
+        averageKwh: round2(total / archiveWindow.length),
+        bestDay: { date: best.date, kwh: round2(best.kwh) },
+        worstDay: { date: worst.date, kwh: round2(worst.kwh) },
+        last7DaysAverageKwh: round2(newest.reduce((sum, row) => sum + row.kwh, 0) / newest.length),
+        yesterdayKwh: yesterdayRow ? round2(yesterdayRow.kwh) : null,
+        yesterdayDate: yesterdayRow ? yesterdayRow.date : null,
+      };
+    }
+  } catch (err) {
+    recentHistory = unavailable(`archive read failed: ${String(err.message).slice(0, 120)}`);
   }
 
   // --- Explicit recent-days (date-keyed) for unambiguous relative-date usage -
@@ -261,18 +293,19 @@ async function buildPlantContext({ token, session }) {
   if (isAvailable(today) && typeof today.generationKwh === "number") {
     recentDays.push({ date: nowIst, label: "today", generationKwh: today.generationKwh });
   }
-  if (Array.isArray(history) && history.length >= 1) {
+  if (isAvailable(recentHistory) && recentHistory.yesterdayDate) {
     recentDays.push({
-      date: history[0].date,
+      date: recentHistory.yesterdayDate,
       label: "yesterday",
-      generationKwh: round2(history[0].generation),
+      generationKwh: recentHistory.yesterdayKwh,
     });
   }
-  if (Array.isArray(history) && history.length >= 2) {
+  const dayBeforeRow = archiveWindow.find((row) => row.date === offsetIstDate(nowIst, -2));
+  if (dayBeforeRow) {
     recentDays.push({
-      date: history[1].date,
+      date: dayBeforeRow.date,
       label: "day before yesterday",
-      generationKwh: round2(history[1].generation),
+      generationKwh: round2(dayBeforeRow.kwh),
     });
   }
 
@@ -292,7 +325,7 @@ async function buildPlantContext({ token, session }) {
 
   // --- Forecast (predictionService output, enhanced with historical correction) -
   let forecast = unavailable("requires today's generation and weather");
-  const monthAverage = isAvailable(month) ? month.dailyAverageKwh : null;
+  const monthAverage = forecastMonthAverage;
   const currentEnergy =
     isAvailable(today) && typeof today.generationKwh === "number" ? today.generationKwh : null;
   if (
@@ -408,7 +441,7 @@ function renderContextAppendix(context) {
     const dayLines = c.monthlyGeneration.map((d) => `${d.date}: ${d.generationKwh} kWh`);
     lines.push(
       section(
-        "CURRENT MONTH DAILY GENERATION (MEASURED - from UTL monthly chart for this calendar month ONLY - use this for best/worst/trend-of-this-month questions)",
+        "CURRENT MONTH DAILY GENERATION (MEASURED - canonical daily values from the EnergyScope Archive for this calendar month ONLY, recorded days only - use this for best/worst/trend-of-this-month questions)",
         dayLines.join("\n"),
       ),
     );
@@ -416,7 +449,7 @@ function renderContextAppendix(context) {
   }
   lines.push(
     section(
-      "CURRENT MONTH SUMMARY (MEASURED)",
+      "CURRENT MONTH SUMMARY (MEASURED - EnergyScope Archive, recorded days only)",
       isAvailable(c.month)
         ? `month-to-date kWh: ${c.month.monthToDateKwh}\ndays recorded: ${c.month.daysRecorded}\ndaily average kWh: ${c.month.dailyAverageKwh}${c.currentMonthBestDay ? `\nbest day: ${c.currentMonthBestDay.generationKwh} kWh on ${c.currentMonthBestDay.date}` : ""}${c.currentMonthWorstDay ? `\nworst day: ${c.currentMonthWorstDay.generationKwh} kWh on ${c.currentMonthWorstDay.date}` : ""}`
         : fmt(c.month),
@@ -425,9 +458,9 @@ function renderContextAppendix(context) {
   lines.push("");
   lines.push(
     section(
-      "LAST 30 COMPLETED DAYS (MEASURED - rolling historical window, may cross month boundaries - use CURRENT MONTH sections above for this-month questions)",
+      "RECENT COMPLETED DAYS (MEASURED - EnergyScope Archive; the 29 completed days before today, excluding today; rolling window may cross month boundaries - use CURRENT MONTH sections above for this-month questions)",
       isAvailable(c.recentHistory)
-        ? `window: ${c.recentHistory.windowDays} days ending ${c.recentHistory.yesterdayDate}\nyesterday kWh: ${c.recentHistory.yesterdayKwh}\nperiod total kWh: ${c.recentHistory.totalKwh}\nperiod average kWh/day: ${c.recentHistory.averageKwh}\nlast-7-days average kWh/day: ${c.recentHistory.last7DaysAverageKwh}\nbest day: ${c.recentHistory.bestDay.kwh} kWh on ${c.recentHistory.bestDay.date}\nworst day: ${c.recentHistory.worstDay.kwh} kWh on ${c.recentHistory.worstDay.date}`
+        ? `recorded days in window: ${c.recentHistory.windowDays} (from ${c.recentHistory.windowFrom} to ${c.recentHistory.windowTo})\nyesterday kWh: ${fmt(c.recentHistory.yesterdayKwh)}${c.recentHistory.yesterdayDate ? ` (${c.recentHistory.yesterdayDate})` : ""}\nperiod total kWh: ${c.recentHistory.totalKwh}\nperiod average kWh/day: ${c.recentHistory.averageKwh}\nlast-7-days average kWh/day: ${c.recentHistory.last7DaysAverageKwh}\nbest day: ${c.recentHistory.bestDay.kwh} kWh on ${c.recentHistory.bestDay.date}\nworst day: ${c.recentHistory.worstDay.kwh} kWh on ${c.recentHistory.worstDay.date}`
         : fmt(c.recentHistory),
     ),
   );
@@ -460,7 +493,7 @@ function renderContextAppendix(context) {
   );
   lines.push("");
   lines.push(
-    "Notes: MEASURED values come from the UTL Solar RMS API. FORECAST and PERFORMANCE values are EnergyScope calculations. Any field showing 'unavailable' must be described as temporarily unavailable - never guessed.",
+    "Notes: MEASURED values come from the EnergyScope Archive (canonical archived UTL readings) except today's generation and live AC power, which come from the live UTL Solar RMS API. FORECAST and PERFORMANCE values are EnergyScope calculations. Any field showing 'unavailable' must be described as temporarily unavailable - never guessed.",
   );
   lines.push("=== END ENERGYSCOPE VERIFIED DATA ===");
 

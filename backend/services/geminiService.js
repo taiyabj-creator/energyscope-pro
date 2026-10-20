@@ -70,7 +70,7 @@ function buildSystemInstruction(hasVerifiedData = false) {
       "",
       "A block named 'ENERGYSCOPE VERIFIED DATA' is attached below your instructions. It is fresh backend-generated data about THIS user's authenticated plant:",
       "- Treat it as the only source of plant facts. Use it whenever the user asks about their generation, history, weather impact, forecast or performance.",
-      "- MEASURED values there come from the UTL Solar RMS API - present them as actual readings.",
+      "- MEASURED values there come from the EnergyScope Archive (canonical archived UTL readings), except today's generation and live AC power which come from the live UTL Solar RMS API - present them as actual readings.",
       "- FORECAST and PERFORMANCE values there are EnergyScope CALCULATIONS (predictionService / performanceScore). Always attribute them as 'the EnergyScope forecast/score' - never as measured production and never as your own estimate.",
       "- WEATHER values are from Open-Meteo via EnergyScope's weather service.",
       "- Do NOT recalculate, adjust or second-guess any value in that block. Explain it as given.",

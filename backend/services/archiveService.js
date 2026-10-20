@@ -50,34 +50,6 @@ function statements() {
       WHERE plant_id = ?
       ORDER BY generation_date ASC
     `),
-    selectMonthly: db.prepare(`
-      SELECT substr(generation_date, 1, 7) AS month,
-             SUM(generation_kwh)           AS generation_kwh,
-             COUNT(*)                      AS days_reported,
-             MIN(generation_kwh)           AS min_day_kwh,
-             MAX(generation_kwh)           AS max_day_kwh
-      FROM solar_generation_daily
-      WHERE plant_id = ? AND substr(generation_date, 1, 7) = ?
-      GROUP BY month
-    `),
-    selectYearly: db.prepare(`
-      SELECT substr(generation_date, 1, 4) AS year,
-             SUM(generation_kwh)           AS generation_kwh,
-             COUNT(*)                      AS days_reported
-      FROM solar_generation_daily
-      WHERE plant_id = ? AND substr(generation_date, 1, 4) = ?
-      GROUP BY year
-    `),
-    selectLifetime: db.prepare(`
-      SELECT plant_id,
-             SUM(generation_kwh) AS generation_kwh,
-             COUNT(*)            AS days_reported,
-             MIN(generation_date) AS first_day,
-             MAX(generation_date) AS last_day
-      FROM solar_generation_daily
-      WHERE plant_id = ?
-      GROUP BY plant_id
-    `),
     coverage: db.prepare(`
       SELECT MIN(generation_date) AS earliest,
              MAX(generation_date) AS latest,
@@ -751,7 +723,6 @@ function getRangeSummary({ from, to } = {}) {
   for (const e of canonical) total += e.kwh;
   const best = canonical.reduce((a, b) => (b.kwh > a.kwh ? b : a));
   const worst = canonical.reduce((a, b) => (b.kwh < a.kwh ? b : a));
-  const round2 = (v) => Number(Number(v).toFixed(2));
 
   const expectedDays =
     from && to
@@ -818,16 +789,86 @@ function getDailyRows({ from, to } = {}) {
   });
 }
 
+/** Rounds to 2 decimals exactly like getRangeSummary/getDailyRows. */
+function round2(value) {
+  return Number(Number(value).toFixed(2));
+}
+
+/**
+ * Canonical {date, kwh} rows over an inclusive range (or the whole archive when
+ * bounds are omitted), skipping rows whose canonical value cannot be resolved.
+ * This is the SAME single source of truth getRangeSummary()/getDailyRows() use -
+ * never the raw generation_kwh column, which holds trapezoid-integrated values
+ * for legacy rows (e.g. Aug 2026 21/22).
+ */
+function canonicalRange(from, to) {
+  const s = statements();
+  const rows =
+    from && to ? s.selectRange.all(PLANT_ID(), from, to) : s.selectAllForPlant.all(PLANT_ID());
+  const out = [];
+  for (const row of rows) {
+    const kwh = canonicalGeneration(row);
+    if (kwh !== null) out.push({ date: row.generation_date, kwh: Number(kwh) });
+  }
+  return out;
+}
+
+/**
+ * Canonical monthly aggregate. Shape matches the previous SQL aggregate
+ * ({month, generation_kwh, days_reported, min_day_kwh, max_day_kwh}) so existing
+ * consumers are unaffected, but values now come from canonicalGeneration()
+ * rather than the raw column. days_reported counts rows with a usable canonical
+ * value only. Returns null when the month has no usable archived day.
+ */
 function getMonthlyTotal(month) {
-  return statements().selectMonthly.get(PLANT_ID(), month) || null;
+  const [year, monthNumber] = String(month)
+    .split("-")
+    .map((part) => Number(part));
+  if (!Number.isInteger(year) || !Number.isInteger(monthNumber)) return null;
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  if (!Number.isFinite(lastDay) || lastDay < 1) return null;
+
+  const canonical = canonicalRange(`${month}-01`, `${month}-${String(lastDay).padStart(2, "0")}`);
+  if (canonical.length === 0) return null;
+
+  const values = canonical.map((entry) => entry.kwh);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return {
+    month,
+    generation_kwh: round2(total),
+    days_reported: canonical.length,
+    min_day_kwh: round2(Math.min(...values)),
+    max_day_kwh: round2(Math.max(...values)),
+  };
 }
 
+/** Canonical yearly aggregate ({year, generation_kwh, days_reported}); null when empty. */
 function getYearlyTotal(year) {
-  return statements().selectYearly.get(PLANT_ID(), year) || null;
+  const canonical = canonicalRange(`${year}-01-01`, `${year}-12-31`);
+  if (canonical.length === 0) return null;
+
+  return {
+    year,
+    generation_kwh: round2(canonical.reduce((sum, entry) => sum + entry.kwh, 0)),
+    days_reported: canonical.length,
+  };
 }
 
+/**
+ * Canonical lifetime aggregate ({plant_id, generation_kwh, days_reported,
+ * first_day, last_day}) over every archived day; null when the archive is empty.
+ */
 function getLifetimeTotal() {
-  return statements().selectLifetime.get(PLANT_ID()) || null;
+  const canonical = canonicalRange();
+  if (canonical.length === 0) return null;
+
+  return {
+    plant_id: PLANT_ID(),
+    generation_kwh: round2(canonical.reduce((sum, entry) => sum + entry.kwh, 0)),
+    days_reported: canonical.length,
+    first_day: canonical[0].date,
+    last_day: canonical[canonical.length - 1].date,
+  };
 }
 
 function getCoverage() {
@@ -952,6 +993,133 @@ function getArchiveSummary() {
 }
 
 // ---------------------------------------------------------------------------
+// Archive-backed analytics (single canonical source for Dashboard/Analytics)
+// ---------------------------------------------------------------------------
+
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * Month-over-month percentage from the LATEST COMPLETED calendar month to the
+ * one immediately before it, using canonical monthly totals.
+ *
+ * "Completed" excludes the current IST month (a partial month must never be
+ * compared against a full one). Returns null - never a misleading 0 - when the
+ * two months are not calendar-consecutive or no completed month pair exists.
+ *
+ * @param {number[]} monthTotals canonical kWh per 0-based month index
+ * @param {number[]} monthDays   recorded-day count per 0-based month index
+ */
+function computeMonthOverMonthPct(monthTotals, monthDays, year, istYear, istMonth) {
+  // 0-based index of the latest COMPLETED month within the requested year.
+  const lastCompleted = year === istYear ? istMonth - 2 : 11;
+  if (lastCompleted < 1) return null;
+
+  let latest = Math.min(lastCompleted, 11);
+  while (latest >= 0 && monthDays[latest] === 0) latest -= 1;
+  if (latest < 1) return null;
+
+  const previous = latest - 1;
+  if (monthDays[previous] === 0 || monthTotals[previous] <= 0) return null;
+
+  return round2(((monthTotals[latest] - monthTotals[previous]) / monthTotals[previous]) * 100);
+}
+
+/**
+ * Canonical, archive-backed analytics for one calendar year. Every value comes
+ * from getDailyRows()/getRangeSummary() (canonicalGeneration precedence), so it
+ * is the SAME single source of truth as the dashboard summary, the History
+ * archive tab and the AI archive appendix.
+ *
+ * - heatmap: one entry per RECORDED day (missing dates are simply absent).
+ * - monthlyTrend: recorded months only, ascending; a month without any archived
+ *   day is omitted rather than plotted as a misleading zero.
+ * - summary: null when the year has no usable day at all.
+ * - currentMonthAverage: canonical current-month-to-date daily average
+ *   (month 1st .. today IST), matching the dashboard archive month card rule.
+ *
+ * @param {{year: number, capacityKw?: number}} params
+ */
+function getYearAnalytics({ year, capacityKw = 0 } = {}) {
+  const y = Number(year);
+  const rows = getDailyRows({ from: `${y}-01-01`, to: `${y}-12-31` });
+  const recorded = rows.filter((row) => row.kwh !== null);
+
+  const monthTotals = new Array(12).fill(0);
+  const monthDays = new Array(12).fill(0);
+  let total = 0;
+  for (const row of recorded) {
+    const index = Number(row.date.slice(5, 7)) - 1;
+    monthTotals[index] += row.kwh;
+    monthDays[index] += 1;
+    total += row.kwh;
+  }
+
+  const heatmap = recorded.map((row) => ({
+    month: SHORT_MONTHS[Number(row.date.slice(5, 7)) - 1],
+    day: Number(row.date.slice(8, 10)),
+    value: row.kwh,
+  }));
+
+  const monthlyTrend = [];
+  for (let index = 0; index < 12; index++) {
+    if (monthDays[index] > 0) {
+      monthlyTrend.push({ label: SHORT_MONTHS[index], value: round2(monthTotals[index]) });
+    }
+  }
+
+  const todayIst = istDateString(new Date());
+  const istYear = Number(todayIst.slice(0, 4));
+  const istMonth = Number(todayIst.slice(5, 7));
+
+  let summary = null;
+  if (recorded.length > 0) {
+    const best = recorded.reduce((a, b) => (b.kwh > a.kwh ? b : a));
+    const worst = recorded.reduce((a, b) => (b.kwh < a.kwh ? b : a));
+    summary = {
+      bestDay: { date: best.date, generation: best.kwh },
+      worstDay: { date: worst.date, generation: worst.kwh },
+      averageDaily: round2(total / recorded.length),
+      specificYield: capacityKw > 0 ? round2(total / capacityKw) : 0,
+      performanceRatio: null,
+      monthOverMonthPct: computeMonthOverMonthPct(monthTotals, monthDays, y, istYear, istMonth),
+    };
+  }
+
+  let currentMonthAverage = null;
+  if (y === istYear) {
+    const monthSummary = getRangeSummary({ from: `${todayIst.slice(0, 7)}-01`, to: todayIst });
+    currentMonthAverage = monthSummary ? monthSummary.dailyAverageKwh : null;
+  }
+
+  return {
+    year: y,
+    heatmap,
+    monthlyTrend,
+    yearProduction: round2(total),
+    daysReported: recorded.length,
+    summary,
+    currentMonthAverage,
+    coverage: {
+      firstDate: recorded.length > 0 ? recorded[0].date : null,
+      latestDate: recorded.length > 0 ? recorded[recorded.length - 1].date : null,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Timezone helper (single source of truth for IST calendar math)
 // ---------------------------------------------------------------------------
 
@@ -984,6 +1152,7 @@ module.exports = {
   getCoverage,
   getLatestArchivedDate,
   getArchiveSummary,
+  getYearAnalytics,
   istDateString,
   canonicalGeneration,
   upsertWeatherSnapshot,

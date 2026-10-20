@@ -37,6 +37,16 @@ export const useLogger = () =>
     refetchInterval: LIVE_REFRESH_INTERVAL_MS,
   });
 
+// Unauthenticated backend health probe. Used by the diagnostics page to read
+// the running backend's application version instead of a hardcoded label.
+export const useBackendHealth = () =>
+  useQuery({
+    queryKey: ["backend-health"],
+    queryFn: api.fetchBackendHealth,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
 export const useEnergySeries = (range: EnergyRange, selectedDate: Date) =>
   useQuery({
     queryKey: ["energy-series", range, selectedDate.toISOString().slice(0, 10)],
@@ -62,19 +72,31 @@ export const useTodayDaySeries = () => {
 };
 
 export const useAnalyticsData = (year: number) =>
-  useQuery({ queryKey: ["analytics", year], queryFn: () => api.fetchAnalyticsData(year) });
+  useQuery({
+    queryKey: ["analytics", year],
+    queryFn: () => archiveApi.fetchArchiveAnalytics(year),
+  });
 
-export const useDailyHistory = (selectedDate: Date) =>
+export const useDailyHistory = (selectedDate: Date, enabled = true) =>
   useQuery({
     queryKey: ["history-daily", selectedDate.getFullYear(), selectedDate.getMonth()],
     queryFn: () => api.fetchDailyHistory(selectedDate),
+    enabled,
   });
 
-export const useMonthlyHistory = (year: number) =>
-  useQuery({ queryKey: ["history-monthly", year], queryFn: () => api.fetchMonthlyHistory(year) });
+export const useMonthlyHistory = (year: number, enabled = true) =>
+  useQuery({
+    queryKey: ["history-monthly", year],
+    queryFn: () => api.fetchMonthlyHistory(year),
+    enabled,
+  });
 
-export const useYearlyHistory = () =>
-  useQuery({ queryKey: ["history-yearly"], queryFn: api.fetchYearlyHistory });
+export const useYearlyHistory = (enabled = true) =>
+  useQuery({
+    queryKey: ["history-yearly"],
+    queryFn: api.fetchYearlyHistory,
+    enabled,
+  });
 
 // EnergyScope Archive source - enabled only while the History page shows it,
 // so archive requests never fire in UTL Live mode.
@@ -130,6 +152,7 @@ export const useManualArchiveEntry = () => {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["archive-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
       queryClient.invalidateQueries({ queryKey: ["archive-history-daily"] });
       queryClient.invalidateQueries({ queryKey: ["archive-history-monthly"] });
       queryClient.invalidateQueries({ queryKey: ["archive-history-yearly"] });
