@@ -44,6 +44,17 @@ const TABS: { key: Tab; label: string }[] = [
 
 type HistorySource = "utl" | "archive";
 
+/**
+ * One chart/table row. `inverterOff` is set by the archive source only: the day
+ * is operator-recorded as "inverter off" (0 kWh by reason, not measured), so the
+ * table shows the reason instead of a misleading 0.00 kWh.
+ */
+interface HistoryTableRow {
+  period: string;
+  generation: number;
+  inverterOff?: boolean;
+}
+
 const SOURCES: { key: HistorySource; label: string }[] = [
   { key: "utl", label: "UTL Live" },
   { key: "archive", label: "EnergyScope Archive" },
@@ -87,11 +98,12 @@ function HistoryPage() {
 
   const total = isArchive ? archiveTotal : yearly;
 
-  const rows =
+  const rows: HistoryTableRow[] =
     tab === "daily"
       ? (daily.data ?? []).map((row) => ({
           period: row.date,
           generation: row.generation,
+          inverterOff: row.inverterOff === true,
         }))
       : tab === "monthly"
         ? (monthly.data ?? []).map((row) => ({
@@ -333,7 +345,13 @@ function HistoryPage() {
                     <td className="px-3 py-2.5">
                       {tab === "daily" ? formatDate(row.period) : row.period}
                     </td>
-                    <td className="num px-3 py-2.5">{row.generation.toFixed(2)} kWh</td>
+                    <td className="num px-3 py-2.5">
+                      {row.inverterOff ? (
+                        <span className="text-muted-foreground">Inverter off</span>
+                      ) : (
+                        `${row.generation.toFixed(2)} kWh`
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

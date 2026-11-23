@@ -52,6 +52,9 @@ function withCanonicalGeneration(row) {
   return {
     ...row,
     generation_kwh: canonical === null ? null : Number(Number(canonical).toFixed(2)),
+    // Additive: lets clients label an operator-declared inverter-off day as a
+    // reason instead of rendering it as a measured 0.00 kWh.
+    inverter_off: archiveService.isInverterOffDay(row),
   };
 }
 

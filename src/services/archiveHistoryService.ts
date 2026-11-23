@@ -29,7 +29,8 @@ interface ArchiveEnvelope<T> {
 
 interface ArchiveDailyRecord {
   generation_date: string;
-  generation_kwh: number;
+  generation_kwh: number | null;
+  inverter_off?: boolean;
 }
 
 interface ArchiveAggregate {
@@ -75,6 +76,7 @@ export async function fetchArchiveMonthDays(
   return (records ?? []).map((record) => ({
     date: record.generation_date,
     generation: Number(record.generation_kwh),
+    inverterOff: record.inverter_off === true,
   }));
 }
 

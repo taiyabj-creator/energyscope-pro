@@ -2,6 +2,12 @@ const { getArchiveDb } = require("../data/archiveDatabase");
 
 const PLANT_ID = () => String(process.env.ARCHIVE_PLANT_ID || "105717");
 
+// `raw_unit` value marking an operator-recorded "inverter was off" day. Such a
+// day is stored as a manual_override with 0 kWh: real recorded data (the plant
+// genuinely produced nothing) rather than a gap, so it must be preserved by the
+// collector and surfaced to clients as a reason, never as a measured zero.
+const INVERTER_OFF_RAW_UNIT = "kWh_inverter_off";
+
 // ---------------------------------------------------------------------------
 // Prepared statements (all parameterized; no string-built SQL anywhere).
 // ---------------------------------------------------------------------------
@@ -428,6 +434,19 @@ function canonicalGeneration(row) {
 
   const gen = Number(row && row.generation_kwh);
   return Number.isFinite(gen) && gen > 0 ? gen : null;
+}
+
+/**
+ * True when the stored row records an operator-declared "inverter off" day.
+ *
+ * Those days hold 0 kWh with raw_unit = kWh_inverter_off and source =
+ * manual_override. canonicalGeneration() deliberately still returns null for
+ * them (a zero must never enter aggregate totals or the learned weather
+ * baseline), so clients need this separate flag to render the day as
+ * "Inverter off" instead of an unmeasured/blank value.
+ */
+function isInverterOffDay(row) {
+  return !!row && String(row.raw_unit) === INVERTER_OFF_RAW_UNIT;
 }
 
 // ---------------------------------------------------------------------------
@@ -1155,6 +1174,8 @@ module.exports = {
   getYearAnalytics,
   istDateString,
   canonicalGeneration,
+  isInverterOffDay,
+  INVERTER_OFF_RAW_UNIT,
   upsertWeatherSnapshot,
   getWeatherSnapshot,
   getWeatherSnapshots,

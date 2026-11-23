@@ -122,6 +122,8 @@ export type EnergyRange = "day" | "month" | "year" | "total";
 export interface DailyHistoryRow {
   date: string;
   generation: number;
+  /** Operator-recorded "inverter off" day: 0 kWh by reason, not by measurement. */
+  inverterOff?: boolean;
 }
 
 export interface MonthlyHistoryRow {
