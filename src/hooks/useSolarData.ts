@@ -102,7 +102,7 @@ export const useYearlyHistory = (enabled = true) =>
 // so archive requests never fire in UTL Live mode.
 export const useArchiveDailyHistory = (selectedDate: Date, enabled: boolean) =>
   useQuery({
-    queryKey: ["archive-history-daily", selectedDate.getFullYear(), selectedDate.getMonth()],
+    queryKey: ["archive-history-daily", "v2", selectedDate.getFullYear(), selectedDate.getMonth()],
     queryFn: () =>
       archiveApi.fetchArchiveMonthDays(selectedDate.getFullYear(), selectedDate.getMonth()),
     enabled,
@@ -110,21 +110,21 @@ export const useArchiveDailyHistory = (selectedDate: Date, enabled: boolean) =>
 
 export const useArchiveMonthlyHistory = (year: number, enabled: boolean) =>
   useQuery({
-    queryKey: ["archive-history-monthly", year],
+    queryKey: ["archive-history-monthly", "v2", year],
     queryFn: () => archiveApi.fetchArchiveYearMonths(year),
     enabled,
   });
 
 export const useArchiveYearlyHistory = (enabled: boolean) =>
   useQuery({
-    queryKey: ["archive-history-yearly"],
+    queryKey: ["archive-history-yearly", "v2"],
     queryFn: archiveApi.fetchArchiveYears,
     enabled,
   });
 
 export const useArchiveTotalHistory = (enabled: boolean) =>
   useQuery({
-    queryKey: ["archive-history-total"],
+    queryKey: ["archive-history-total", "v2"],
     queryFn: archiveApi.fetchArchiveTotal,
     enabled,
   });
