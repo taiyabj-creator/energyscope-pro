@@ -3,6 +3,7 @@ const rateLimit = require("express-rate-limit");
 
 const router = express.Router();
 const archiveService = require("../services/archiveService");
+const benefitsService = require("../services/benefitsService");
 const masterPassword = require("../services/masterPasswordService");
 const plantConfig = require("../config/plant.json");
 
@@ -184,6 +185,26 @@ router.get("/total", async (req, res) => {
     res.json({ success: true, data: row });
   } catch (err) {
     console.error("[ARCHIVE] total error:", err.message);
+    res.status(500).json({ success: false, message: "Archive unavailable." });
+  }
+});
+
+// Environmental & economic benefit estimates over the archived lifetime.
+// Derived only from the canonical `getLifetimeTotal()` generation, with every
+// conversion factor documented in `benefitsService.js`.
+router.get("/benefits", async (req, res) => {
+  try {
+    const data = benefitsService.getLifetimeBenefits();
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Archive is empty.",
+      });
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("[ARCHIVE] benefits error:", err.message);
     res.status(500).json({ success: false, message: "Archive unavailable." });
   }
 });

@@ -16,11 +16,19 @@ import type {
   AnalyticsData,
   ArchiveEnergySummary,
   DailyHistoryRow,
+  EnvironmentalBenefits,
   MonthlyHistoryRow,
   YearlyHistoryRow,
 } from "@/types/solar";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * `raw_unit` provenance the backend stores for an operator-recorded
+ * "inverter off" day. Used as a fallback for backends that predate the additive
+ * `inverter_off` response flag.
+ */
+const INVERTER_OFF_RAW_UNIT = "kWh_inverter_off";
 
 interface ArchiveEnvelope<T> {
   success: boolean;
@@ -30,7 +38,10 @@ interface ArchiveEnvelope<T> {
 interface ArchiveDailyRecord {
   generation_date: string;
   generation_kwh: number | null;
+  /** Explicit API flag for an operator-recorded inverter-off day. */
   inverter_off?: boolean;
+  /** Stored provenance; the pre-flag backends only expose this. */
+  raw_unit?: string;
 }
 
 interface ArchiveAggregate {
@@ -76,7 +87,7 @@ export async function fetchArchiveMonthDays(
   return (records ?? []).map((record) => ({
     date: record.generation_date,
     generation: Number(record.generation_kwh),
-    inverterOff: record.inverter_off === true,
+    inverterOff: record.inverter_off === true || record.raw_unit === INVERTER_OFF_RAW_UNIT,
   }));
 }
 
@@ -134,6 +145,23 @@ export async function fetchArchiveTotal(): Promise<YearlyHistoryRow[]> {
     totals.first_day && totals.last_day ? `${totals.first_day} – ${totals.last_day}` : "Lifetime";
 
   return [{ year: period, generation: Number(totals.generation_kwh) }];
+}
+
+/**
+ * Lifetime environmental & economic benefit estimates. Computed server-side
+ * from the canonical archive lifetime total (`/api/archive/benefits`), so the
+ * dashboard never re-derives history through a second path. Resolves to null
+ * when the archive has no data yet.
+ */
+export async function fetchArchiveBenefits(): Promise<EnvironmentalBenefits | null> {
+  try {
+    const json = await apiRequest<ArchiveEnvelope<EnvironmentalBenefits>>("/api/archive/benefits");
+    return json.success && json.data ? json.data : null;
+  } catch {
+    // 404 = archive not populated yet; any other failure degrades to the
+    // panel's empty state rather than failing the dashboard.
+    return null;
+  }
 }
 
 /** Canonical, archive-backed analytics for one calendar year (heatmap, trend, summary). */

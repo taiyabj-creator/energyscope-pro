@@ -262,3 +262,39 @@ export interface BackendHealth {
   timestamp: string;
   version: string;
 }
+
+/**
+ * Owner/account identity read live from the UTL portal
+ * (`GET /api/auth/profile`). `name` is null when neither the portal nor a
+ * cached copy is available — the UI then falls back to a neutral label rather
+ * than inventing a personal name.
+ */
+export interface OwnerProfile {
+  name: string | null;
+  email: string | null;
+  role: string | null;
+  business: string | null;
+  /** `live` = just fetched, `cache` = last known good, `unavailable` = neither. */
+  source: "live" | "cache" | "unavailable";
+}
+
+/**
+ * Lifetime environmental & economic estimates derived server-side from the
+ * canonical archive generation (`GET /api/archive/benefits`).
+ */
+export interface EnvironmentalBenefits {
+  generation_kwh: number;
+  co2_avoided_kg: number;
+  coal_saved_kg: number;
+  trees_equivalent: number;
+  savings_inr: number;
+  tariff_inr_per_kwh: number;
+  factors: {
+    co2_kg_per_kwh: number;
+    coal_kg_per_kwh: number;
+    tree_kg_co2_per_year: number;
+  };
+  days_reported: number;
+  first_day: string | null;
+  last_day: string | null;
+}

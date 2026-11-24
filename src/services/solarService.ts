@@ -12,6 +12,7 @@ import type {
   MaintenanceState,
   MonthlyHistoryRow,
   NotificationItem,
+  OwnerProfile,
   PlantInfo,
   SeriesPoint,
   WeatherData,
@@ -220,23 +221,44 @@ export async function fetchEnergyTotals(): Promise<EnergyTotals> {
 }
 
 export async function fetchPlantInfo(): Promise<PlantInfo> {
-  const config = await apiRequest<{
-    name: string;
-    capacity: number;
-    location: string;
-    latitude: number;
-    longitude: number;
-  }>("/api/plant-config");
+  const [config, ownerName] = await Promise.all([
+    apiRequest<{
+      name: string;
+      capacity: number;
+      location: string;
+      latitude: number;
+      longitude: number;
+    }>("/api/plant-config"),
+    fetchOwnerName(),
+  ]);
 
   return {
     name: config.name,
-    ownerName: "Jamal",
+    ownerName,
     capacityKw: config.capacity,
     location: config.location,
     installationDate: "2026-07-06",
     latitude: config.latitude,
     longitude: config.longitude,
   };
+}
+
+/**
+ * Owner name as recorded on the UTL account, read live through the backend
+ * (`GET /api/auth/profile` -> UTL `/user/profile`). Display-only: a failed or
+ * unavailable lookup degrades to the neutral "Owner" label so the dashboard
+ * still renders. It must never fall back to a hardcoded personal name.
+ */
+async function fetchOwnerName(): Promise<string> {
+  try {
+    const profile = await apiRequest<{ success: boolean; data?: OwnerProfile }>(
+      "/api/auth/profile",
+    );
+
+    return profile.data?.name?.trim() || "Owner";
+  } catch {
+    return "Owner";
+  }
 }
 
 export async function fetchInverter(): Promise<InverterInfo> {

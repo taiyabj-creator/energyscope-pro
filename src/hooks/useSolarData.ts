@@ -129,6 +129,16 @@ export const useArchiveTotalHistory = (enabled: boolean) =>
     enabled,
   });
 
+// Lifetime environmental & economic estimates, derived server-side from the
+// canonical archive total. Cached for the session: lifetime figures only move
+// when a new day is archived, so a dashboard refresh does not need to refetch.
+export const useArchiveBenefits = () =>
+  useQuery({
+    queryKey: ["archive-benefits"],
+    queryFn: archiveApi.fetchArchiveBenefits,
+    staleTime: 30 * 60_000,
+  });
+
 // Canonical archive summary for the dashboard Energy Summary cards' Archive
 // source. Only fetched while at least one summary card is showing Archive
 // data; the interval keeps today's row fresh once it is archived.

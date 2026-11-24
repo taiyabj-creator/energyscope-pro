@@ -373,8 +373,11 @@ authMiddleware → export.js → exportScope.resolveExportScope()
   spawned by `adapters/pythonAdapter.js`; other UTL calls are made directly from
   Node. Python 3 is therefore a runtime dependency of token refresh.
 - Reverse-engineered endpoints currently used include plant status, plant info,
-  inverter/device listing, logger diagnostics, and daily/monthly/yearly/total
-  generation charts.
+  inverter/device listing, logger diagnostics, daily/monthly/yearly/total
+  generation charts, and the account profile (`GET /user/profile`).
+- The account profile is the **only** source of the owner name shown on the
+  dashboard and in the Android app. There is no hardcoded owner name anywhere:
+  when the profile cannot be read the UI shows the neutral label "Owner".
 - A dedicated headless account (env: `UTL_COLLECTOR_EMAIL` /
   `UTL_COLLECTOR_PASSWORD`) drives the scheduled archive collector so archival
   does not depend on any interactive user being logged in.
@@ -385,6 +388,10 @@ authMiddleware → export.js → exportScope.resolveExportScope()
 
 - Login: `POST /api/auth/login` verifies credentials against UTL, creates a JWT
   plus an encrypted session row, and returns the token to the client.
+- `GET /api/auth/profile` returns the signed-in account's owner identity
+  (`name`, `email`, `role`, `business`) read live from the UTL profile endpoint,
+  with a short in-memory cache and a last-known-good fallback. It is
+  display-only and never exposes permissions, `jwtInfo` or the UTL token.
 - Every subsequent data request carries `Authorization: Bearer <JWT>`;
   `middleware/auth.js` validates the token **and** the matching session row.
 - Sessions expire; automatic refresh of the underlying UTL token keeps long-lived
@@ -651,10 +658,11 @@ All under `/api`, JSON over HTTPS. Data routes require `Authorization: Bearer`.
 
 | Area | Endpoints (representative) |
 | --- | --- |
-| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, session status |
+| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/profile` (live UTL owner identity) |
 | Plant | `GET /api/plant`, `GET /api/config` |
 | Live data | `GET /api/charts/daily|monthly|yearly|total`, `GET /api/inverter` |
 | Archive | `GET /api/archive/status|daily|monthly|yearly|total`, `GET /api/archive/summary`, `GET /api/archive/analytics?year=YYYY` — canonical generation plus coverage (`days_reported`, `first_day`/`last_day`, `missingDays`) |
+| Archive (benefits) | `GET /api/archive/benefits` — lifetime environmental/economic estimates (CO₂, coal, trees, bill savings) derived from `getLifetimeTotal()` with the documented factors in `services/benefitsService.js` |
 | Archive (write) | `POST /api/archive/manual` — Manual Archive Entry; authenticated session **and** master password |
 | Exports | `GET /api/export?format=csv\|xlsx\|pdf&scope=date\|range\|month\|year&source=utl\|archive` — authenticated production history from either source, with per-row provenance for archive rows |
 | Prediction | `GET /api/prediction/...` (next-day energy, performance score) |
