@@ -149,9 +149,9 @@ export async function fetchArchiveTotal(): Promise<YearlyHistoryRow[]> {
 
 /**
  * Lifetime environmental & economic benefit estimates. Computed server-side
- * from the canonical archive lifetime total (`/api/archive/benefits`), so the
- * dashboard never re-derives history through a second path. Resolves to null
- * when the archive has no data yet.
+ * from the UTL inverter's cumulative lifetime counter (`/api/archive/benefits`),
+ * with the canonical archive total only as a degraded fallback while the logger
+ * is unreachable. Resolves to null when neither source has data.
  */
 export async function fetchArchiveBenefits(): Promise<EnvironmentalBenefits | null> {
   try {

@@ -130,8 +130,9 @@ export const useArchiveTotalHistory = (enabled: boolean) =>
   });
 
 // Lifetime environmental & economic estimates, derived server-side from the
-// canonical archive total. Cached for the session: lifetime figures only move
-// when a new day is archived, so a dashboard refresh does not need to refetch.
+// UTL inverter's cumulative lifetime counter (archive total only as a degraded
+// fallback). Cached for the session: lifetime figures only move when the logger
+// reports a new cumulative value, so a dashboard refresh need not refetch.
 export const useArchiveBenefits = () =>
   useQuery({
     queryKey: ["archive-benefits"],

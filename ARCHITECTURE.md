@@ -662,7 +662,7 @@ All under `/api`, JSON over HTTPS. Data routes require `Authorization: Bearer`.
 | Plant | `GET /api/plant`, `GET /api/config` |
 | Live data | `GET /api/charts/daily|monthly|yearly|total`, `GET /api/inverter` |
 | Archive | `GET /api/archive/status|daily|monthly|yearly|total`, `GET /api/archive/summary`, `GET /api/archive/analytics?year=YYYY` — canonical generation plus coverage (`days_reported`, `first_day`/`last_day`, `missingDays`) |
-| Archive (benefits) | `GET /api/archive/benefits` — lifetime environmental/economic estimates (CO₂, coal, trees, bill savings) derived from `getLifetimeTotal()` with the documented factors in `services/benefitsService.js` |
+| Archive (benefits) | `GET /api/archive/benefits` — lifetime environmental/economic estimates (CO₂, coal, trees, bill savings) computed from the UTL inverter's cumulative `daily_energy_produced` counter, with the documented factors in `services/benefitsService.js`. `generation_source` is `utl_logger`; the canonical archive total is used only as a degraded `archive` fallback while UTL is unreachable |
 | Archive (write) | `POST /api/archive/manual` — Manual Archive Entry; authenticated session **and** master password |
 | Exports | `GET /api/export?format=csv\|xlsx\|pdf&scope=date\|range\|month\|year&source=utl\|archive` — authenticated production history from either source, with per-row provenance for archive rows |
 | Prediction | `GET /api/prediction/...` (next-day energy, performance score) |

@@ -17,12 +17,13 @@ function formatMass(kg: number): { value: string; unit: string } {
 }
 
 /**
- * Environmental & economic value of the plant's archived generation.
+ * Environmental & economic value of the plant's lifetime generation.
  *
- * Every number comes from `/api/archive/benefits`, which derives it from the
- * canonical archive lifetime total. The panel states the conversion factors and
- * the tariff assumption so the figures read as documented estimates rather than
- * metered measurements.
+ * Every number comes from `/api/archive/benefits`, which uses the UTL inverter's
+ * cumulative lifetime counter (falling back to the archived total only while the
+ * logger is unreachable). The panel states the conversion factors, the tariff
+ * assumption and which lifetime source was used, so the figures read as
+ * documented estimates rather than metered measurements.
  */
 export function EnvironmentalBenefitsPanel({
   benefits,
@@ -87,10 +88,23 @@ export function EnvironmentalBenefitsPanel({
           </div>
 
           <p className="mt-5 text-[11px] leading-relaxed text-muted-foreground">
-            Based on {CO2_FORMATTER.format(benefits.generation_kwh)} kWh of archived generation
-            {period ? ` (${period})` : ""}. Factors: {benefits.factors.co2_kg_per_kwh} kg CO₂/kWh
-            (CEA India grid baseline), {benefits.factors.coal_kg_per_kwh} kg coal/kWh, and{" "}
+            Based on {CO2_FORMATTER.format(benefits.generation_kwh)} kWh of{" "}
+            {benefits.generation_source === "utl_logger"
+              ? "lifetime generation reported by the UTL inverter"
+              : "archived generation"}
+            {benefits.generation_source === "utl_logger"
+              ? benefits.observed_at
+                ? ` (as of ${formatDate(benefits.observed_at.slice(0, 10))})`
+                : ""
+              : period
+                ? ` (${period})`
+                : ""}
+            . Factors: {benefits.factors.co2_kg_per_kwh} kg CO₂/kWh (CEA India grid baseline),{" "}
+            {benefits.factors.coal_kg_per_kwh} kg coal/kWh, and{" "}
             {benefits.factors.tree_kg_co2_per_year} kg CO₂ absorbed per mature tree per year.
+            {benefits.generation_source === "archive"
+              ? " UTL logger unavailable, so the archived total is shown."
+              : ""}{" "}
             Estimates for context, not metered measurements.
           </p>
         </>

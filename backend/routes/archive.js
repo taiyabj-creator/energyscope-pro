@@ -189,16 +189,21 @@ router.get("/total", async (req, res) => {
   }
 });
 
-// Environmental & economic benefit estimates over the archived lifetime.
-// Derived only from the canonical `getLifetimeTotal()` generation, with every
-// conversion factor documented in `benefitsService.js`.
+// Environmental & economic benefit estimates over the plant's lifetime.
+// The energy figure is the UTL inverter's cumulative lifetime counter (the same
+// value the dashboard shows); the canonical archive total is only a degraded
+// fallback while UTL is unreachable. Conversion factors are documented in
+// `benefitsService.js`, and `generation_source` tells clients which value ran.
 router.get("/benefits", async (req, res) => {
   try {
-    const data = benefitsService.getLifetimeBenefits();
+    const data = await benefitsService.getLifetimeBenefits({
+      token: req.token,
+      session: req.session,
+    });
     if (!data) {
       return res.status(404).json({
         success: false,
-        message: "Archive is empty.",
+        message: "No lifetime generation is available yet.",
       });
     }
 
