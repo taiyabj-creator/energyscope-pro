@@ -4,6 +4,7 @@ const rateLimit = require("express-rate-limit");
 const router = express.Router();
 const archiveService = require("../services/archiveService");
 const benefitsService = require("../services/benefitsService");
+const recordsService = require("../services/recordsService");
 const masterPassword = require("../services/masterPasswordService");
 const plantConfig = require("../config/plant.json");
 
@@ -185,6 +186,31 @@ router.get("/total", async (req, res) => {
     res.json({ success: true, data: row });
   } catch (err) {
     console.error("[ARCHIVE] total error:", err.message);
+    res.status(500).json({ success: false, message: "Archive unavailable." });
+  }
+});
+
+// Plant records & milestones over the canonical archive: highest day/month,
+// peak instantaneous power (stored intraday curves), 1/5/10 MWh milestones
+// (the 1 MWh date is estimated from the pre-coverage lifetime gap), production
+// streaks, best month/year and record-breaking days. Derived on read from the
+// canonical helpers, so records follow the archive automatically.
+router.get("/records", async (req, res) => {
+  try {
+    const data = await recordsService.getRecords({
+      token: req.token,
+      session: req.session,
+    });
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Archive is empty.",
+      });
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("[ARCHIVE] records error:", err.message);
     res.status(500).json({ success: false, message: "Archive unavailable." });
   }
 });

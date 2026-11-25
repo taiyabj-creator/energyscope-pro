@@ -98,22 +98,36 @@ async function fetchLoggerLifetime(token, session) {
 }
 
 /**
- * Lifetime benefits from the UTL logger counter, falling back to the canonical
- * archive total only while the logger is unreachable. Null when neither source
- * has a usable lifetime figure.
+ * Resolves the plant's lifetime generation once per minute so the benefits and
+ * records endpoints share a single upstream inverter call:
+ *   - `utl_logger`: the UTL inverter's cumulative counter (authoritative),
+ *   - `archive`: the canonical archive total, only while UTL is unreachable.
+ * Returns null when neither source has a usable figure.
  */
-async function getLifetimeBenefits({ token, session } = {}) {
+const LIFETIME_CACHE_TTL_MS = 60 * 1000;
+let lifetimeCache = { key: null, at: 0, value: null };
+
+async function getLifetimeGeneration({ token, session } = {}) {
+  const key = `${session?.email ?? ""}:${session?.utlToken ?? ""}`;
+  const now = Date.now();
+  if (
+    lifetimeCache.value &&
+    lifetimeCache.key === key &&
+    now - lifetimeCache.at < LIFETIME_CACHE_TTL_MS
+  ) {
+    return lifetimeCache.value;
+  }
+
+  let value = null;
+
   if (token && session?.utlToken) {
     try {
       const logger = await fetchLoggerLifetime(token, session);
       if (logger) {
-        return {
-          ...computeBenefits(logger.generationKwh),
-          generation_source: "utl_logger",
+        value = {
+          kwh: logger.generationKwh,
+          source: "utl_logger",
           observed_at: logger.observedAt,
-          days_reported: null,
-          first_day: null,
-          last_day: null,
         };
       }
     } catch (err) {
@@ -121,21 +135,52 @@ async function getLifetimeBenefits({ token, session } = {}) {
     }
   }
 
+  if (!value) {
+    const total = archiveService.getLifetimeTotal();
+    if (total) {
+      value = { kwh: Number(total.generation_kwh), source: "archive", observed_at: null };
+    }
+  }
+
+  if (value) lifetimeCache = { key, at: now, value };
+  return value;
+}
+
+/**
+ * Lifetime benefits from the UTL logger counter, falling back to the canonical
+ * archive total only while the logger is unreachable. Null when neither source
+ * has a usable lifetime figure.
+ */
+async function getLifetimeBenefits({ token, session } = {}) {
+  const lifetime = await getLifetimeGeneration({ token, session });
+  if (!lifetime) return null;
+
+  if (lifetime.source === "utl_logger") {
+    return {
+      ...computeBenefits(lifetime.kwh),
+      generation_source: "utl_logger",
+      observed_at: lifetime.observed_at,
+      days_reported: null,
+      first_day: null,
+      last_day: null,
+    };
+  }
+
   const total = archiveService.getLifetimeTotal();
-  if (!total) return null;
 
   return {
-    ...computeBenefits(Number(total.generation_kwh)),
+    ...computeBenefits(lifetime.kwh),
     generation_source: "archive",
     observed_at: null,
-    days_reported: total.days_reported,
-    first_day: total.first_day,
-    last_day: total.last_day,
+    days_reported: total?.days_reported ?? null,
+    first_day: total?.first_day ?? null,
+    last_day: total?.last_day ?? null,
   };
 }
 
 module.exports = {
   computeBenefits,
   getLifetimeBenefits,
+  getLifetimeGeneration,
   loggerLifetimeKwh,
 };

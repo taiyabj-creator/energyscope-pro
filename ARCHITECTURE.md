@@ -255,6 +255,7 @@ counter (a live reading, not a stored archive aggregate) — see the table below
 | Dashboard month card | archive `GET /api/archive/summary` | `YYYY-MM-01` → latest archived day in the current IST month |
 | Dashboard year card | archive `GET /api/archive/summary` | first → latest archived day of the year |
 | Dashboard lifetime card | UTL inverter counter | `daily_energy_produced` from `GET /api/inverter` — cumulative all-time output in kWh; never the archive total or the daily counter |
+| Dashboard records & milestones | archive `GET /api/archive/records` | canonical days + stored intraday curves; the 1 MWh date is estimated from the logger-vs-archive pre-coverage gap (§17), later milestones are actual crossings |
 | Analytics | archive `GET /api/archive/analytics?year=` | recorded days of that year; latest-completed-month pair for MoM |
 | History → UTL Live tab | `GET /api/charts/*` | verbatim UTL values (unchanged) |
 | History → EnergyScope Archive tab | `GET /api/archive/daily|monthly` | canonical rows plus `daysReported` coverage |
@@ -650,6 +651,47 @@ Planned:
 - Migrating maintenance storage from JSON to SQLite for transactional integrity.
 - Retention/pruning policies for archive growth.
 
+### Plant records & milestones
+
+`backend/services/recordsService.js` derives every record **on read** from the
+canonical helpers above (`getCanonicalDays()`, `getPowerCurves()`) and exposes it
+through `GET /api/archive/records`. Nothing is stored, so records follow the
+archive automatically; the service never writes, rewrites or "repairs" an archive
+row.
+
+| Record | Rule |
+| --- | --- |
+| Highest day | max canonical daily kWh; the earliest date wins ties |
+| Highest month | max canonical monthly total, flagged `complete` only when every calendar day has a row |
+| Peak power | max `PvProduction` sample (W) across the stored `solar_power_curve` payloads; the only historical power source (memoized behind a curve fingerprint) |
+| Streaks | consecutive calendar days with canonical kWh > 0; a missing day, an inverter-off day or a zero breaks the run |
+| Best month | highest kWh/day average among months with at least 5 archived days |
+| Best year | highest annual canonical total, flagged `complete` when fully archived |
+| Record-breaking days | days that beat every earlier archived day; the first archived day is the baseline, not a record |
+
+**Milestones and the 1 MWh estimate.** The plant produced energy before the
+logger was connected, so the UTL inverter's cumulative lifetime counter is ahead
+of archived generation. That difference is the *pre-coverage gap*
+(`lifetime.pre_coverage_kwh`). Its only use is the **first milestone date**:
+
+```
+target_archive_kwh = 1,000 − pre_coverage_kwh
+1 MWh date         = first archived day whose cumulative canonical kWh ≥ target_archive_kwh
+```
+
+The item is returned with `estimated: true`,
+`basis: "estimated_pre_coverage_offset"` and the audit numbers
+(`target_archive_kwh`, `cumulative_before_kwh`, `day_kwh`, `fraction_of_day`), and
+both clients render it as "≈ date / Estimated". The archived daily/monthly rows
+are never modified to make the estimate. Every later milestone (5 MWh, 10 MWh, …)
+is the plain archived cumulative crossing with `offset_kwh: 0` — no offset.
+
+The offset is applied **only when the archive has no missing days**
+(`missing_days === 0`). With a hole in coverage the logger/archive difference
+includes unrecorded archive energy, so subtracting it would invent a date;
+incomplete coverage therefore falls back to the plain archive crossing
+(`pre_coverage_applied: false`).
+
 ---
 
 ## 18. Current API Design
@@ -663,6 +705,7 @@ All under `/api`, JSON over HTTPS. Data routes require `Authorization: Bearer`.
 | Live data | `GET /api/charts/daily|monthly|yearly|total`, `GET /api/inverter` |
 | Archive | `GET /api/archive/status|daily|monthly|yearly|total`, `GET /api/archive/summary`, `GET /api/archive/analytics?year=YYYY` — canonical generation plus coverage (`days_reported`, `first_day`/`last_day`, `missingDays`) |
 | Archive (benefits) | `GET /api/archive/benefits` — lifetime environmental/economic estimates (CO₂, coal, trees, bill savings) computed from the UTL inverter's cumulative `daily_energy_produced` counter, with the documented factors in `services/benefitsService.js`. `generation_source` is `utl_logger`; the canonical archive total is used only as a degraded `archive` fallback while UTL is unreachable |
+| Archive (records) | `GET /api/archive/records` — plant records & milestones derived on read from the canonical archive (`services/recordsService.js`): highest day/month, peak instantaneous power from the stored `solar_power_curve` samples, 1/5/10 MWh milestones, production streaks, best month/year and record-breaking days. Read-only; never writes or rewrites archived rows. `lifetime.pre_coverage_kwh` is the logger-vs-archive gap and is applied to the **1 MWh date only** (see §17, "Plant records & milestones"), with `estimated: true` on that item; later milestones use actual archive crossings (`offset_kwh: 0`). The offset is suppressed whenever the archive has missing days, so an incomplete archive cannot date a milestone that predates coverage |
 | Archive (write) | `POST /api/archive/manual` — Manual Archive Entry; authenticated session **and** master password |
 | Exports | `GET /api/export?format=csv\|xlsx\|pdf&scope=date\|range\|month\|year&source=utl\|archive` — authenticated production history from either source, with per-row provenance for archive rows |
 | Prediction | `GET /api/prediction/...` (next-day energy, performance score) |

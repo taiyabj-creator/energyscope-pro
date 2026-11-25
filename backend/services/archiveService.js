@@ -156,6 +156,20 @@ function statements() {
         ON w.plant_id = g.plant_id AND w.snapshot_date = g.generation_date
       WHERE w.plant_id = ?
     `),
+    // Stored intraday power curves (raw UTL charts/daily payload). Read-only:
+    // used for peak-power records, never as a generation source.
+    curveSelectAll: db.prepare(`
+      SELECT generation_date, points_count, raw_payload, updated_at
+      FROM solar_power_curve
+      WHERE plant_id = ?
+      ORDER BY generation_date ASC
+    `),
+    curveSelectRange: db.prepare(`
+      SELECT generation_date, points_count, raw_payload, updated_at
+      FROM solar_power_curve
+      WHERE plant_id = ? AND generation_date >= ? AND generation_date <= ?
+      ORDER BY generation_date ASC
+    `),
     // Manual archive entry audit trail (never stores secrets or credentials).
     manualLogInsert: db.prepare(`
       INSERT INTO manual_archive_log
@@ -814,6 +828,42 @@ function round2(value) {
 }
 
 /**
+ * Every archived day for the plant, ascending, with the canonical value plus the
+ * provenance callers need to describe it honestly:
+ *   { date, kwh, isInverterOff, isManualOverride, source }
+ *
+ * kwh is canonicalGeneration() (null for an operator-declared inverter-off day
+ * or an unresolved row), never the raw generation_kwh column. Unlike
+ * getDailyRows() this also exposes isInverterOff, so records/milestones can tell
+ * "known zero by reason" apart from "unusable row" without reading raw columns.
+ */
+function getCanonicalDays() {
+  const rows = statements().selectAllForPlant.all(PLANT_ID());
+  return rows.map((row) => {
+    const kwh = canonicalGeneration(row);
+    return {
+      date: row.generation_date,
+      kwh: kwh === null ? null : round2(kwh),
+      isInverterOff: isInverterOffDay(row),
+      isManualOverride: String(row.source) === "manual_override",
+      source: row.source ?? null,
+    };
+  });
+}
+
+/**
+ * Stored intraday power curves (the raw UTL charts/daily payload captured when a
+ * day was collected), ascending by date. Read-only diagnostic/record data - the
+ * W samples are never treated as generation totals.
+ */
+function getPowerCurves({ from, to } = {}) {
+  const s = statements();
+  return from && to
+    ? s.curveSelectRange.all(PLANT_ID(), from, to)
+    : s.curveSelectAll.all(PLANT_ID());
+}
+
+/**
  * Canonical {date, kwh} rows over an inclusive range (or the whole archive when
  * bounds are omitted), skipping rows whose canonical value cannot be resolved.
  * This is the SAME single source of truth getRangeSummary()/getDailyRows() use -
@@ -1165,6 +1215,8 @@ module.exports = {
   getDailyRecords,
   getRangeSummary,
   getDailyRows,
+  getCanonicalDays,
+  getPowerCurves,
   getMonthlyTotal,
   getYearlyTotal,
   getLifetimeTotal,

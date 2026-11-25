@@ -301,3 +301,106 @@ export interface EnvironmentalBenefits {
   first_day: string | null;
   last_day: string | null;
 }
+
+/**
+ * Plant records & milestones (`GET /api/archive/records`), computed on read from
+ * the canonical archive. Every figure is derived from archived daily generation
+ * (or the stored intraday curves for peak power), never from a second aggregate.
+ */
+export interface PlantRecords {
+  coverage: {
+    first_day: string;
+    last_day: string;
+    archived_days: number;
+    days_reported: number;
+    expected_days: number;
+    missing_days: number;
+    inverter_off_days: number;
+  };
+  /**
+   * Lifetime figure and the pre-coverage gap. `generation_source` is
+   * `utl_logger` when the inverter's own cumulative counter answered (the
+   * authoritative lifetime value) and `archive` while it is unreachable.
+   * `pre_coverage_kwh` is lifetime minus archived output, but it is only
+   * non-zero when the archive has no missing days — otherwise the difference
+   * includes unrecorded archive energy and cannot date anything.
+   */
+  lifetime: {
+    generation_kwh: number;
+    generation_source: "utl_logger" | "archive";
+    observed_at: string | null;
+    archive_total_kwh: number;
+    pre_coverage_kwh: number;
+    pre_coverage_applied: boolean;
+  };
+  highest_day: { date: string; kwh: number } | null;
+  highest_month: {
+    month: string;
+    kwh: number;
+    days_reported: number;
+    days_expected: number;
+    complete: boolean;
+  } | null;
+  highest_power: {
+    date: string;
+    watts: number;
+    time_minutes: number | null;
+    curve_days: number;
+  } | null;
+  /**
+   * Milestones. Only the first one may be `estimated`: the plant generated
+   * before archive coverage began, so its true 1 MWh date is derived by
+   * subtracting the pre-coverage gap from 1,000 kWh and reading the archived
+   * cumulative crossing of that target. Later milestones are plain archive
+   * crossings (`offset_kwh` 0).
+   */
+  milestones: {
+    method: string;
+    coverage_start: string;
+    archive_complete: boolean;
+    pre_coverage_applied: boolean;
+    lifetime_kwh: number;
+    lifetime_source: "utl_logger" | "archive";
+    archive_total_kwh: number;
+    pre_coverage_kwh: number;
+    items: Array<{
+      threshold_kwh: number;
+      label: string;
+      achieved_on: string | null;
+      estimated: boolean;
+      basis: "archive_cumulative" | "estimated_pre_coverage_offset";
+      achieved_before_coverage: boolean;
+      offset_kwh: number;
+      progress_pct: number;
+      estimate?: {
+        target_archive_kwh: number;
+        cumulative_before_kwh: number;
+        day_kwh: number;
+        fraction_of_day: number;
+      } | null;
+    }>;
+  };
+  streaks: {
+    longest: { from: string; to: string; days: number } | null;
+    current: { from: string; to: string; days: number } | null;
+  };
+  best_month: {
+    month: string;
+    kwh: number;
+    average_kwh: number;
+    days_reported: number;
+    days_expected: number;
+    complete: boolean;
+  } | null;
+  best_year: {
+    year: string;
+    kwh: number;
+    days_reported: number;
+    days_expected: number;
+    complete: boolean;
+  } | null;
+  record_days: {
+    count: number;
+    latest: Array<{ date: string; kwh: number; previous_best_kwh: number }>;
+  };
+}

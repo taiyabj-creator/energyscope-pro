@@ -9,6 +9,7 @@ import { PowerFlow } from "@/components/widgets/PowerFlow";
 import { Chip, Panel, PanelHeading, StatusDot } from "@/components/ui/primitives";
 import {
   useArchiveBenefits,
+  useArchiveRecords,
   useArchiveSummary,
   useEnergyTotals,
   useInverter,
@@ -33,6 +34,7 @@ import { formatMeasurementFreshness } from "@/utils/measurementFreshness";
 import { getCapacityPercentage } from "@/utils/capacity";
 import { DashboardSkeleton } from "@/components/dashboard/loading/DashboardSkeleton";
 import { EnvironmentalBenefitsPanel } from "@/components/dashboard/EnvironmentalBenefitsPanel";
+import { PlantRecordsPanel } from "@/components/dashboard/PlantRecordsPanel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -66,6 +68,7 @@ function DashboardPage() {
   const { alerts, count } = useAlerts();
   const { data: prediction } = usePrediction();
   const { data: benefits, isLoading: benefitsLoading } = useArchiveBenefits();
+  const { data: records, isLoading: recordsLoading } = useArchiveRecords();
 
   // Per-card source toggle between UTL and the canonical Archive. Session-only
   // (component state): each of the three Energy Summary cards toggles
@@ -488,6 +491,8 @@ function DashboardPage() {
       </div>
 
       <EnvironmentalBenefitsPanel benefits={benefits} loading={benefitsLoading} delay={0.62} />
+
+      <PlantRecordsPanel records={records} loading={recordsLoading} delay={0.64} />
 
       <Panel
         delay={0.65}

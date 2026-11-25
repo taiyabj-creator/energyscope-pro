@@ -18,6 +18,7 @@ import type {
   DailyHistoryRow,
   EnvironmentalBenefits,
   MonthlyHistoryRow,
+  PlantRecords,
   YearlyHistoryRow,
 } from "@/types/solar";
 
@@ -160,6 +161,21 @@ export async function fetchArchiveBenefits(): Promise<EnvironmentalBenefits | nu
   } catch {
     // 404 = archive not populated yet; any other failure degrades to the
     // panel's empty state rather than failing the dashboard.
+    return null;
+  }
+}
+
+/**
+ * Plant records & milestones: highest day/month, peak power, milestones,
+ * streaks, best month/year and record-breaking days. Computed server-side from
+ * the canonical archive. Resolves to null while the archive is empty.
+ */
+export async function fetchArchiveRecords(): Promise<PlantRecords | null> {
+  try {
+    const json = await apiRequest<ArchiveEnvelope<PlantRecords>>("/api/archive/records");
+    return json.success && json.data ? json.data : null;
+  } catch {
+    // 404 = archive not populated yet; degrade to the panel's empty state.
     return null;
   }
 }

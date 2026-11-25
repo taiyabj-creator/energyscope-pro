@@ -140,6 +140,17 @@ export const useArchiveBenefits = () =>
     staleTime: 30 * 60_000,
   });
 
+// Plant records & milestones (highest day/month, peak power, 1/5/10 MWh
+// milestones, streaks, best month/year, record-breaking days), computed
+// server-side from the canonical archive. Records only move when a new day is
+// archived, so a 15-minute stale window avoids refetching on every render.
+export const useArchiveRecords = () =>
+  useQuery({
+    queryKey: ["archive-records"],
+    queryFn: archiveApi.fetchArchiveRecords,
+    staleTime: 15 * 60_000,
+  });
+
 // Canonical archive summary for the dashboard Energy Summary cards' Archive
 // source. Only fetched while at least one summary card is showing Archive
 // data; the interval keeps today's row fresh once it is archived.
@@ -168,6 +179,7 @@ export const useManualArchiveEntry = () => {
       queryClient.invalidateQueries({ queryKey: ["archive-history-monthly"] });
       queryClient.invalidateQueries({ queryKey: ["archive-history-yearly"] });
       queryClient.invalidateQueries({ queryKey: ["archive-history-total"] });
+      queryClient.invalidateQueries({ queryKey: ["archive-records"] });
     },
   });
 };
