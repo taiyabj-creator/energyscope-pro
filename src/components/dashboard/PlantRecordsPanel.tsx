@@ -1,4 +1,4 @@
-import { CalendarRange, Flame, Trophy, Zap } from "lucide-react";
+import { CalendarRange, Trophy, Zap } from "lucide-react";
 import { Chip, Panel, PanelHeading, Skeleton } from "@/components/ui/primitives";
 import type { PlantRecords } from "@/types/solar";
 import { formatDate, formatEnergy, formatPower } from "@/utils/format";
@@ -48,11 +48,8 @@ export function PlantRecordsPanel({
   const highestDay = records?.highest_day ?? null;
   const highestMonth = records?.highest_month ?? null;
   const highestPower = records?.highest_power ?? null;
-  const longest = records?.streaks.longest ?? null;
-  const current = records?.streaks.current ?? null;
   const bestMonth = records?.best_month ?? null;
   const bestYear = records?.best_year ?? null;
-  const coverage = records?.coverage ?? null;
   const peakTime = formatSampleTime(highestPower?.time_minutes ?? null);
 
   const dayEnergy = highestDay ? formatEnergy(highestDay.kwh) : null;
@@ -68,14 +65,14 @@ export function PlantRecordsPanel({
       />
 
       {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
             <Skeleton key={index} className="h-24 w-full" />
           ))}
         </div>
       ) : records ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <RecordTile
               icon={Trophy}
               label="Highest day"
@@ -105,19 +102,6 @@ export function PlantRecordsPanel({
                 highestPower
                   ? `${formatDate(highestPower.date)}${peakTime ? ` · ${peakTime}` : ""}`
                   : "No stored power curve yet"
-              }
-            />
-            <RecordTile
-              icon={Flame}
-              label="Longest streak"
-              value={longest ? String(longest.days) : "—"}
-              unit={longest ? (longest.days === 1 ? "day" : "days") : undefined}
-              note={
-                longest
-                  ? `${formatDate(longest.from)} – ${formatDate(longest.to)}${
-                      current ? ` · current ${current.days}d` : ""
-                    }`
-                  : "No production streak yet"
               }
             />
           </div>
@@ -161,34 +145,6 @@ export function PlantRecordsPanel({
               <strong className="font-semibold text-foreground">{records.record_days.count}</strong>
             </span>
           </div>
-
-          <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-            Computed from archived daily generation
-            {coverage
-              ? ` (${coverage.days_reported} of ${coverage.expected_days} days, ${formatDate(
-                  coverage.first_day,
-                )} – ${formatDate(coverage.last_day)})`
-              : ""}
-            . Streaks are consecutive producing days; a missing day or an inverter-off day breaks
-            the run
-            {coverage && coverage.inverter_off_days > 0
-              ? ` (${coverage.inverter_off_days} inverter-off days excluded)`
-              : ""}
-            .{" "}
-            {records.milestones.pre_coverage_applied
-              ? `The plant generated before archive coverage began: its lifetime counter reads ${NUMBER_FORMATTER.format(
-                  records.lifetime.generation_kwh,
-                )} kWh, ${NUMBER_FORMATTER.format(
-                  records.lifetime.pre_coverage_kwh,
-                )} kWh ahead of archived output. The 1 MWh date is therefore estimated as the day archived generation passed ${NUMBER_FORMATTER.format(
-                  1000 - records.lifetime.pre_coverage_kwh,
-                )} kWh (1,000 kWh minus that gap); later milestones are actual archive crossings with no offset.`
-              : `Milestones count cumulative archived output from ${formatDate(
-                  records.milestones.coverage_start,
-                )}; output produced before coverage began is not dated.`}{" "}
-            Peak power is the highest stored intraday sample
-            {highestPower ? ` across ${highestPower.curve_days} days` : ""}.
-          </p>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -239,7 +195,7 @@ function MilestoneCard({
   const estimated = milestone.estimated;
   const note = milestone.achieved_on
     ? estimated
-      ? `Estimated from the ${NUMBER_FORMATTER.format(milestone.offset_kwh)} kWh generated before archive coverage`
+      ? ""
       : "Milestone reached"
     : milestone.achieved_before_coverage
       ? "Reached before archive coverage began"
